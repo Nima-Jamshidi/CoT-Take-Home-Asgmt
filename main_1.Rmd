@@ -1,11 +1,13 @@
 ---
 title: "Parking infractions, City of Toronto take home assignment"
 author: "Nima Jamshidi"
-output: 
-  html_notebook:
-    toc: true
+output:
+  pdf_document:
+    toc: yes
   pdf_notebook:
-    toc: true
+    toc: yes
+  html_notebook:
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -28,9 +30,12 @@ suppressPackageStartupMessages(library(vroom))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(sf))
 suppressPackageStartupMessages(library(leaflet))
+suppressPackageStartupMessages(library(rjson))
+suppressPackageStartupMessages(library(scales))
+suppressPackageStartupMessages(library(paletteer))
 ```
 
-```{r parking ticket query 1}
+```{r parking ticket query 1,eval = FALSE}
 PaTi_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_data_tot <- tibble()
@@ -107,7 +112,7 @@ PaTi_retrieve <- function(i){
 
 ```
 
-```{r parking ticket query 2, warning = FALSE}
+```{r parking ticket query 2, warning = FALSE, eval = FALSE}
 for (i in str_which(PaTi_list$name, "parking-tickets-\\d")) {
   print(paste(str_extract(PaTi_list$name[i],"\\d+"),"started."))
   res <- PaTi_retrieve(i)
@@ -116,6 +121,10 @@ for (i in str_which(PaTi_list$name, "parking-tickets-\\d")) {
 }
 rm(Col_type,Pati_list,res,i,Corrupted_csv)
 saveRDS(PaTi_data_tot,"PaTi_data_tot.rds")
+```
+
+
+```{r parking ticket query 3, warning = FALSE}
 PaTi_data_tot <- readRDS("PaTi_data_tot.rds") %>% filter(date_of_infraction>20200000)
 ```
 ```{r parking ticket explore}
@@ -176,8 +185,11 @@ PaTi_data_top20_2 <- PaTi_data_top20_split[!PaTi_data_top20_split$group,] %>%
   summarise(n=n()) %>% 
   rowwise() %>%
   mutate(location2 = tolower(str_trim(location2)),
-         location4 = tolower(str_trim(location4))) 
+         location4 = tolower(str_trim(location4)))
+```
 
+
+```{r find point2, eval = FALSE}
 Intersection_geocoder <- function(location2,location4){
   shp1 <- GeoC_shp %>% 
     filter(LFNAME_lower == location2)
@@ -201,6 +213,10 @@ GeoC_shp_intersection <- PaTi_data_top20_2 %>% ungroup() %>% select(location2,lo
   mutate(GEO_ID = purrr::map2_dbl(location2,location2,Intersection_geocoder))
 
 saveRDS(GeoC_shp_intersection,"GeoC_shp_intersection.rds")
+```
+
+
+```{r find point3}
 GeoC_shp_intersection <- readRDS("GeoC_shp_intersection.rds")
 
 
@@ -220,6 +236,8 @@ PaTi_data_top20 <- PaTi_data_top20_1 %>%
 ```
 
 ```{r Q1 plot}
+fine_data <- PaTi_data_tot %>% group_by(infraction_code,set_fine_amount) %>% summarise(n=n()) %>% filter(n == max(n)) %>% select(-n)
+
 PaTi_polygon_1 <- GeoC_shp %>% 
   inner_join((PaTi_data_top20 %>%
                filter(reference_type == "LINK") %>%
@@ -243,7 +261,7 @@ PaTi_polygon_make <- function(data) {
     data %>%
       # summarise(n_link = n()) %>%
       # filter(n_link == 1) %>%
-      st_transform(3347) %>%
+      st_transform(2952) %>%
       st_buffer(dist = 10) %>%
       st_transform(4326) %>% 
       st_cast("POLYGON")
@@ -251,7 +269,7 @@ PaTi_polygon_make <- function(data) {
     data %>%
       # summarise(n_link = n()) %>%
       st_cast("LINESTRING") %>%
-      st_transform(3347) %>%
+      st_transform(2952) %>%
       st_buffer(dist = 10) %>%
       st_transform(4326)
   } else if (data$n_link[1] == 3) {
@@ -274,12 +292,14 @@ PaTi_polygon_make <- function(data) {
 PaTi_polygon_pl <- PaTi_polygon_1 %>%
   rbind(PaTi_polygon_2) %>%
   filter(n_link > 1) %>% 
-  PaTi_polygon_make()
+  PaTi_polygon_make() %>% 
+  left_join(fine_data,by = "infraction_code")
 
 PaTi_polygon_pt <- PaTi_polygon_1 %>%
   rbind(PaTi_polygon_2) %>%
   filter(n_link == 1) %>% 
-  PaTi_polygon_make()
+  PaTi_polygon_make() %>% 
+  left_join(fine_data,by = "infraction_code")
   
 
 # leaf_sf(tt[1,] %>% st_transform(4326)) %>% 
@@ -299,20 +319,23 @@ PaTi_polygon_pt <- PaTi_polygon_1 %>%
 pal <- colorBin(colorRampPalette(c("#d0073a","#000000"))(20),
                 domain = PaTi_polygon_pl$no_infraction)
 
-leaflet() %>% 
+PaTi_plot <- leaflet() %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
   addPolygons(data = PaTi_polygon_pl,
               popup=paste(#"<b>Infraction Code</b>",PaTi_polygon_pl$infraction_code,"<br>",
                           "<b>Description:</b>",PaTi_polygon_pl$infraction_description,"<br>",
                           "<b>Location:</b>",PaTi_polygon_pl$LFNAME,"<br>",
-                          "<b>Number of Infraction:</b>",PaTi_polygon_pl$no_infraction,"<br>"),
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pl$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pl$set_fine_amount),"<br>"),
               label = ~ paste0("Infraction Code ", infraction_code),
               color = #colorRampPalette(c("#d0073a","#000000")))
                 ~ pal(no_infraction)) %>% 
   addPolygons(data = PaTi_polygon_pt,
-              popup=paste("Stratum:",PaTi_polygon_pt$infraction_code,"<br>",
-                          "<b>Location:</b>",PaTi_polygon_pl$LFNAME,"<br>",
-                          "Description:",PaTi_polygon_pl$infraction_description),
+              popup=paste(
+                          "<b>Description:</b>",PaTi_polygon_pt$infraction_description,"<br>",
+                          "<b>Location:</b>",PaTi_polygon_pt$LFNAME,"<br>",
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pt$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pt$set_fine_amount),"<br>"),
               label = ~ paste0("Infraction Code ", infraction_code),
               color = ~ pal(no_infraction)) %>% 
   addLegend(
@@ -323,285 +346,264 @@ leaflet() %>%
     title = "Number of Infraction:",
     opacity = 1
   )
+
+PaTi_plot
 ```
 
 
 ```{r Green P API}
-GeoC_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/address-points-municipal-toronto-one-address-repository/")
-GeoC_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/address-points-municipal-toronto-one-address-repository/")
-GeoC_retrieve <- function() {
-  GeoC_data_id <- GeoC_list[[3, "id"]]
+GP_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/green-p-parking/")
+GP_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/green-p-parking/")
+GP_retrieve <- function(URL,No,format) {
+  list <- opendatatoronto::list_package_resources(URL)
+  data_id <- list[[No, "id"]]
   resource <-
-    resource_show(GeoC_data_id, url = "https://ckan0.cf.opendata.inter.prod-toronto.ca/", as = "list")
+    resource_show(data_id, url = "https://ckan0.cf.opendata.inter.prod-toronto.ca/", as = "list")
   dir <- tempdir()
-  resource_dir <- fs::dir_create(paste0(dir, "/", GeoC_data_id))
+  resource_dir <- fs::dir_create(paste0(dir, "/", data_id))
   save_path <-
     ckan_fetch(
       resource[["url"]],
       store = "disk",
-      path = paste0(dir, "/", GeoC_data_id, "/", "res.zip")
+      path = paste0(dir, "/", data_id, "/", "res.",format)
     )
-  GeoC_files <- unzip(save_path[["path"]], exdir = resource_dir)
-  GeoC_shp <- st_read(GeoC_files[str_ends(GeoC_files, ".shp")])
+  GP_json <- fromJSON(file = save_path[["path"]])
 }
 
-GeoC_shp <- GeoC_retrieve()
+GP_json <- GP_retrieve("https://open.toronto.ca/dataset/green-p-parking/",1,"JSON")
+
+GP_data <- tibble(id = 1:length(GP_json[[1]])) %>% 
+  mutate(address = map_chr(id,~ GP_json[[1]][[.x]]$address),
+         lat = as.double(map_chr(id,~ GP_json[[1]][[.x]]$lat)),
+         lng = as.double(map_chr(id,~ GP_json[[1]][[.x]]$lng)),
+         rate = map_chr(id,~ GP_json[[1]][[.x]]$rate)) 
+GP_sf <- GP_data %>% 
+  st_as_sf(coords = c("lng", "lat"),
+           crs = st_crs(4326))
+
+```
+
+```{r Green P tile}
+PaTi_GP <- tibble()
+PaTi_GP_over <- function(r) {
+  GP_sf_buf <- GP_sf %>%
+    st_transform(2952) %>%
+    st_buffer(dist = r) %>%
+    st_transform(4326)
+  
+  
+  GP_sf_buf %>% st_intersects(PaTi_polygon_pl)
+  sparse_pl <-
+    PaTi_polygon_pl %>% st_intersects(GP_sf_buf, sparse = T)
+  over_pl <-
+    tibble(infraction_code = PaTi_polygon_pl$infraction_code) %>%
+    mutate(
+      row_num = row_number(),
+      GP_distance = r,
+      no_GP = map_dbl(row_num,  ~ length(sparse_pl[[.x]]))
+    )
+  
+  GP_sf_buf %>% st_intersects(PaTi_polygon_pt)
+  sparse_pt <-
+    PaTi_polygon_pt %>% st_intersects(GP_sf_buf, sparse = T)
+  over_pt <-
+    tibble(infraction_code = PaTi_polygon_pt$infraction_code) %>%
+    mutate(
+      row_num = row_number(),
+      GP_distance = r,
+      no_GP = map_dbl(row_num,  ~ length(sparse_pt[[.x]]))
+    )
+  
+  res <- over_pl %>% rbind(over_pt)
+}
+
+for (r in seq(0,800,by=50)) {
+  PaTi_GP <- PaTi_GP %>% rbind(PaTi_GP_over(r))
+}
+
+
+PaTi_GP_tile <- PaTi_GP %>%
+  ggplot()+
+  geom_raster(aes(x=factor(infraction_code,levels = PaTi_data_top20$infraction_code),y=GP_distance,fill=no_GP))+ 
+  theme_bw()+
+  theme(axis.text.y = element_text(vjust = 1.5),
+        axis.ticks.y = element_blank()#,
+        # panel.grid = element_blank(),
+        # panel.border = element_blank()
+        )+
+  scale_x_discrete(name = "Infraction code",expand=c(0,0))+
+  scale_y_continuous(name = "Green P Parking lot distance from\nthe most common location for an infraction code",expand=c(0,0))+
+  scale_fill_continuous(name = "number of\nGreen P\nparking lots")
+  
+plot(PaTi_GP_tile)
+```
+```{r Green P map}
+PaTi_GP_over_id <- function(r) {
+  GP_sf_buf <- GP_sf %>%
+    st_transform(2952) %>%
+    st_buffer(dist = r) %>%
+    st_transform(4326)
+  
+
+  GP_sf_buf %>% st_intersects(PaTi_polygon_pl)
+  sparse_pl <-
+    PaTi_polygon_pl %>% st_intersects(GP_sf_buf, sparse = T)
+  
+  
+  
+  GP_sf_buf %>% st_intersects(PaTi_polygon_pt)
+  sparse_pt <-
+    PaTi_polygon_pt %>% st_intersects(GP_sf_buf, sparse = T)
+  
+  res <- unique(c(unlist(sparse_pl),unlist(sparse_pt)))
+  
+  return(res)
+}
+
+PaTi_GP_400_id <- PaTi_GP_over_id(400)
+GP_sf_buf <- GP_sf[PaTi_GP_400_id,] %>%
+    st_transform(2952) %>%
+    st_buffer(dist = 400) %>%
+    st_transform(4326)
+
+PaTi_GP_400_plot <- leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data = PaTi_polygon_pl,
+              popup=paste(#"<b>Infraction Code</b>",PaTi_polygon_pl$infraction_code,"<br>",
+                          "<b>Description:</b>",PaTi_polygon_pl$infraction_description,"<br>",
+                          "<b>Location:</b>",PaTi_polygon_pl$LFNAME,"<br>",
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pl$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pl$set_fine_amount),"<br>"),
+              label = ~ paste0("Infraction Code ", infraction_code),
+              color = "#6e031e") %>% 
+  addPolygons(data = PaTi_polygon_pt,
+              popup=paste(
+                          "<b>Description:</b>",PaTi_polygon_pt$infraction_description,"<br>",
+                          "<b>Location:</b>",PaTi_polygon_pt$LFNAME,"<br>",
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pt$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pt$set_fine_amount),"<br>"),
+              label = ~ paste0("Infraction Code ", infraction_code),
+              color = "#6e031e") %>% 
+  addPolygons(data = GP_sf_buf,
+              popup=paste(
+                          "<b>Address:</b>",GP_sf_buf$address,"<br>",
+                          "<b>Rate:</b>",GP_sf_buf$rate),
+              label = ~ paste0("Green P id: ", id),
+              color = "green") #%>% 
+
+PaTi_GP_400_plot
 ```
 
 
-```{r}
-PaTi_data_top20_2tt <- PaTi_data_top20_split[!PaTi_data_top20_split$group,] %>%  
-  group_by(infraction_code,location2,location4) %>% 
-  summarise(n=n()) %>% 
-  rowwise() %>%
-  mutate(location2 = tolower(str_trim(location2)),
-         location4 = tolower(str_trim(location4))) 
+```{r Green P map}
+dist_mat <- GP_sf %>% st_distance(PaTi_polygon_pl %>% st_centroid())
+PaTi_polygon_pl <- PaTi_polygon_pl %>% 
+  ungroup() %>%
+  mutate(row_num = row_number()) %>% 
+  mutate(
+    closest_GP = map_dbl(row_num, ~ which.min(dist_mat[,.x])),
+    GP_dist = map_dbl(row_num, ~ min(dist_mat[,.x])))
 
-PaTi_data_top20_2tt %>% arrange(desc(n))
+dist_mat <- GP_sf %>% st_distance(PaTi_polygon_pt %>% st_centroid())
+PaTi_polygon_pt <- PaTi_polygon_pt %>% 
+  ungroup() %>%
+  mutate(row_num = row_number()) %>% 
+  mutate(
+    closest_GP = map_dbl(row_num, ~ which.min(dist_mat[,.x])),
+    GP_dist = map_dbl(row_num, ~ min(dist_mat[,.x])))
 
-st_as_sf(as.data.frame(tt3[c(1,1,2,3),]),coords = c("X","Y")) %>% summarise()
-st_sf
-st_as
-  PaTi_polygon_make()
+PaTi_polygon_pl[,c("closest_GP","GP_dist")]
+GP_sf_closest <- GP_sf %>% inner_join(rbind(PaTi_polygon_pl[,c("closest_GP","GP_dist")],PaTi_polygon_pt[,c("closest_GP","GP_dist")]) %>% st_drop_geometry(),by = c("id"="closest_GP"))
 
-PaTi_polygon %>% 
-  filter(n_link == 1) %>% 
-  st_transform(3347) %>% 
-  st_buffer(dist = 10) %>% 
+GP_sf_closest_buf <- GP_sf_closest %>% st_transform(2952)
+GP_polygons <- map2(GP_sf_closest_buf$geometry,GP_sf_closest_buf$GP_dist, ~st_buffer(.x,.y))
+
+GP_sf_closest_buf <- GP_sf_closest_buf %>% 
+  st_drop_geometry() %>%
+  mutate(row_num = row_number()) %>%
+  mutate(geometry = map(row_num, ~ tt[[.x]])) %>% 
+  st_as_sf(sf_column_name = "geometry",crs = 2952) %>% 
+  mutate(color = paletteer_c("grDevices::rainbow", 20)) %>% 
   st_transform(4326)
 
+PaTi_polygon_pl <- PaTi_polygon_pl %>% left_join(GP_sf_closest_buf %>% st_drop_geometry() %>% select(id,color),by = c("closest_GP" = "id"))
 
-  
-PaTi_polygon %>% st_transform(3347)
-
-PaTi_polygon <- GeoC_shp %>% 
-  filter(LINK %in% PaTi_data_top20[PaTi_data_top20$reference_type == "LINK",]$reference) %>% 
-  rbind(GeoC_shp %>% filter(GEO_ID %in% PaTi_data_top20[PaTi_data_top20$reference_type == "GEO_ID",]$reference)) %>%
-  group_by(LINK) %>% 
-  summarise() %>%
-  st_cast("MULTIPOINT") %>% 
-  st_cast("POLYGON") %>% 
-  st_convex_hull()
-  
-
-
-tt <- GeoC_shp %>% 
-  filter(LINK %in% PaTi_data_top20[PaTi_data_top20$reference_type == "LINK",]$reference) %>% 
-  rbind(GeoC_shp %>% filter(GEO_ID %in% PaTi_data_top20[PaTi_data_top20$reference_type == "GEO_ID",]$reference)) %>% 
-  group_by(LINK) %>% 
-  mutate(n_link=n()) %>% 
-  filter(n_link>3) %>% 
-  summarise() %>%
-  # st_cast("MULTIPOINT") %>% 
-  st_cast("POLYGON") %>% 
-  st_convex_hull()
-
-PaTi_polygon[1,] %>% 
-  st_cast("POLYGON") %>% 
-  st_convex_hull()
-  
-  
-plot(tt)
-
-
-library(leaflet)
-install.packages("simplevis")
-library(simplevis)
-leaf_sf_col(tt %>% st_transform(4326))
-simplevis::l
-
-leaf_sf(tt %>% st_transform(4326))
-
-
-leaflet(tt %>% st_transform(4326)) %>% 
-  # addProviderTiles("CartoDB.Positron") %>% 
-  addPolygons(color = "green")
-leaflet::leaflet(tt) %>% leaflet::addPolygons(tt)
-
-m <- leaflet() %>%
-   addTiles()
-m
+PaTi_polygon_pt <- PaTi_polygon_pt %>% left_join(GP_sf_closest_buf %>% st_drop_geometry() %>% select(id,color),by = c("closest_GP" = "id"))
 
 
 
-tt %>% st_transform(4326)
+leaflet() %>% 
+  addProviderTiles(providers$CartoDB.Positron) %>% 
+  addPolygons(data = PaTi_polygon_pl,
+              popup=paste(#"<b>Infraction Code</b>",PaTi_polygon_pl$infraction_code,"<br>",
+                          "<b>Description:</b>",PaTi_polygon_pl$infraction_description,"<br>",
+                          "<b>Location:</b>",PaTi_polygon_pl$LFNAME,"<br>",
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pl$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pl$set_fine_amount),"<br>"),
+              label = ~ paste0("Infraction Code ", infraction_code),
+              color = ~ color) %>% 
+  addPolygons(data = PaTi_polygon_pt,
+              popup=paste(
+                          "<b>Description:</b>",PaTi_polygon_pt$infraction_description,"<br>",
+                          "<b>Location:</b>",PaTi_polygon_pt$LFNAME,"<br>",
+                          "<b>Number of Infraction:</b>",PaTi_polygon_pt$no_infraction,"<br>",
+                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pt$set_fine_amount),"<br>"),
+              label = ~ paste0("Infraction Code ", infraction_code),
+              color = ~ color) %>% 
+  addPolygons(data = GP_sf_closest_buf,
+              popup=paste(
+                          "<b>Address:</b>",GP_sf_closest_buf$address,"<br>",
+                          "<b>Rate:</b>",GP_sf_closest_buf$rate),
+              label = ~ paste0("Green P id: ", id),
+              color = ~ color) %>% 
+  addMarkers(data = GP_sf_closest,
+             # icon = makeIcon("https://www.iconpacks.net/icons/2/free-location-icon-2955-thumb.png", iconWidth = 16, iconHeight = 16),
+              #   icon = makeIcon("my-icon.png", iconWidth = 16, iconHeight = 16),
+              popup=paste(
+                          "<b>Address:</b>",GP_sf_closest_buf$address,"<br>",
+                          "<b>Rate:</b>",GP_sf_closest_buf$rate),
+              label = ~ paste0("Green P id: ", id))
 
-GeoC_shp %>% 
-  filter(LINK %in% PaTi_data_top20[PaTi_data_top20$reference_type == "LINK",]$reference) %>% 
-  rbind(GeoC_shp %>% filter(GEO_ID %in% PaTi_data_top20[PaTi_data_top20$reference_type == "GEO_ID",]$reference)) %>% 
-  group_by(LINK) %>% 
-  summarise(n_link=n())
-
-
-tt2 <- GeoC_shp[c(1,1,1,1),] %>% 
-  group_by(LINK) %>% 
-  summarise() %>%
-  st_cast("MULTIPOINT") %>% 
-  st_cast("POLYGON")
-
-tt3 <- GeoC_shp %>% filter(LINK == 30034748	)
-tt3 <- tt3[c(1,1,2,3),]
-tt3 %>% 
-  group_by(LINK) %>% 
-  summarise() %>%
-  st_cast("MULTIPOINT") %>% 
-  st_cast("POLYGON")
-
-
-rep(GeoC_shp[1,])
-
-GeoC_shp %>% st_drop_geometry() %>% filter(GEO_ID == 14200303)
-
-14670981 %in% PaTi_data_top20$reference
-
+makeIcon
 ```
 
+```{r neighbourhoods API}
+ngbh_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhoods/")
+ngbh_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/neighbourhoods/")
+ngbh_retrieve <- function(URL,No,format) {
+  list <- opendatatoronto::list_package_resources(URL)
+  data_id <- list[[No, "id"]]
+  resource <-
+    resource_show(data_id, url = "https://ckan0.cf.opendata.inter.prod-toronto.ca/", as = "list")
+  dir <- tempdir()
+  resource_dir <- fs::dir_create(paste0(dir, "/", data_id))
+  save_path <-
+    ckan_fetch(
+      resource[["url"]],
+      store = "disk",
+      path = paste0(dir, "/", data_id, "/", "res.",format)
+    )
+  files <- unzip(save_path[["path"]], exdir = resource_dir)
+  res <- st_read(files[str_ends(files, ".shp")])
+  res_names <- read.csv(files[str_ends(files, ".csv")])
+  colnames(res) <- res_names$name
+  return(res)
+}
 
-```{r}
-grepl('^\\d', "1ABC")
-grepl('^[[:punct:]]?\\d', "#16")
-str_extract(str_extract("#16A Ahwaz","^[:punct:]?\\d*((?<=\\d)[:alpha:](?=\\s))?"),"[^[:punct:]]+")
-str_extract(str_extract(location2,"^[:punct:]?\\d*((?<=\\d)[:alpha:](?=\\s))?"),"[^[:punct:]]+")
+URL = "https://open.toronto.ca/dataset/neighbourhoods/"
+No = 5
+format = "zip"
 
-str_extract("#2","(?<=[:punct:])\\d?")
-  left_join((GeoC_shp %>% select(GEO_ID,LINK,LFNAME_lower,ADDRESS)),by = c("LFNAME_lower","ADDRESS")) %>% 
-  group_by(infraction_code, LINK) %>%
-  summarise(n = sum(n,na.rm = TRUE)) %>% 
-  mutate(accurate_type = T)
+ngbh_shp <- ngbh_retrieve("https://open.toronto.ca/dataset/neighbourhoods/",5,"zip")
+ngbh_prof_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhood-profiles/")
+ngbh_prof_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/neighbourhood-profiles/")
+ngbh_prof_data <- ngbh_prof_list[2,] %>% get_resource()
+GeoC_shp
 
-
-
-GeoC_shp %>% filter(LFNAME == "Lake Promenade")
-GeoC_shp %>% mutate(row_num = row_number()) %>% filter(str_like(LFNAME_lower,"clendenan ave"),ADDRESS == 573)
-PaTi_data_tot[1,] %>% separate(location2,into = c("ADDRESS","LFNAME"),sep = "(?<=[0-9])(?=\\s?[A-Z])",remove = FALSE)
-
-PaTi_data_tot %>% filter(infraction_code == 134)
-PaTi_data_tot %>% filter(!is.na(location2),!is.na(location4))
-```
-
-
-```{r}
-PaTi_data_tot[1:100,] %>%
-  group_by(infraction_code,location2) %>% 
-  summarise(n=n()) %>% 
-  rowwise() %>%
-  mutate(ADDRESS = str_extract(location2,"^\\d*((?<=\\d)[:alpha:])?"),
-         LFNAME_lower = tolower(str_trim(sub(ADDRESS,"",location2)))) %>% 
-  left_join((GeoC_shp %>% select(GEO_ID,LINK,LFNAME_lower,ADDRESS)),by = c("LFNAME_lower","ADDRESS")) %>%
-  group_by(infraction_code, LINK) %>%
-  summarise(n = sum(n,na.rm = TRUE))
-
-tt1 <- PaTi_data_tot[1:100,] %>%
-  rowwise() %>%
-  mutate(ADDRESS = str_extract(location2,"^\\d*((?<=\\d)[:alpha:])?"),
-         LFNAME_lower = tolower(str_trim(sub(ADDRESS,"",location2))))
-  separate(location2,into = c("ADDRESS","LFNAME"),sep = "(?<=[0-9])(?=\\s?[a-zA-Z])",remove = FALSE) %>%
-  mutate(LFNAME = tolower(LFNAME))
-
-  
-tt2 <- PaTi_data_tot[1:100,] %>%
-  rowwise() %>%
-  # group_by(infraction_code,location2) %>% 
-  # summarise(n=n()) %>% 
-  mutate(ADDRESS = str_extract(location2,"^\\d*((?<=\\d)[:alpha:])?"),
-         LFNAME_lower = tolower(str_trim(sub(ADDRESS,"",location2))))
-
-         LFNAME_lower = tolower(str_extract(location2,"\\D*$")))
-  
-tt2 <- PaTi_data_tot[1:100,]
-tt2$location2[1] = "16A Ahwaz"
-tt2 %>% rowwise() %>% 
-  # group_by(infraction_code,location2) %>% 
-  # summarise(n=n()) %>% 
-  mutate(ADDRESS = str_extract(location2,"^\\d*(\\d[:alpha:])?"),
-         LFNAME = str_trim(sub(ADDRESS,"",location2)))
-
-str_extract("16A Ahwaz","^\\d*((?<=\\d)[:alpha:])?")
-str_extract("16A Ahwaz","(?<=\\d)[:alpha:]")
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == "harrison st")
-str_sub()
-sub("573","","573 CLENDENAN AVE")
-sepa
-sub("k","","kjnas")
-"kjnas" - "k"
-
-```
-```{r}
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("HARRISON ST")) %>% inner_join((GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHAW ST"))),by = "LINK")
-
-tt3 <- GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("HARRISON ST"))
-tt4 <- GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHAW ST"))
-tt3$LINK %in% tt4$LINK
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHAW ST"),ADDRESS == "336")
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 30096117) %>% arrange(ADDRESS)
+ngbh_shp %>% filter(str_(AREA_NAME,"Etobicoke"))
+str_which(ngbh_shp$AREA_NAME,"Etobicoke")
 
 
-tt3 <- GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHERBOURNE ST"))
-tt4 <- GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("GERRARD ST E"))
-any(tt3$LINK %in% tt4$LINK)
-any(tt3$FCODE %in% tt4$FCODE)
-
-unique((GeoC_shp %>% st_drop_geometry())$FCODE)
-
-tt3 %>% select(-MAINT_STAG,-ADDRESS,-LO_NUM,-LONUMSUF,HINUM,HINUMSUF,ARC_SIDE,-DISTANCE,-FCODE_DES,-CLASS,-MUN_NAME,-WARD_NAME-)
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHAW ST"),ADDRESS == "440")
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 14019718) %>% arrange(ADDRESS)
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("COLLEGE ST"),ADDRESS == "795")
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 1144747) %>% arrange(ADDRESS)
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 14019718) %>% arrange(OBJECTID)
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 1144747) %>% arrange(DISTANCE)
-
-GeoC_shp %>% st_drop_geometry() %>% group_by(LINK) %>% summarise(n=n()) %>% arrange(desc(n))
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 30081011) %>% arrange(ADDRESS)
-2057097
-2232038
-
-785502
-acores ave
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("SHAW ST")) %>% group_by(LINK)
-GeoC_shp %>% filter(LFNAME_lower == tolower("SHAW ST")) %>% group_by(LINK) %>% filter(DISTANCE %in% c(min(DISTANCE),max(DISTANCE))) %>% arrange(LINK,DISTANCE) %>% mutate(n=n()) %>% filter(n<2)
-
-GeoC_shp %>% st_drop_geometry() %>% filter(LFNAME_lower == tolower("plante ave"))
-GeoC_shp %>% st_drop_geometry() %>% filter(str_like(LFNAME_lower,tolower("st luke lane")))
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 30070016) %>% arrange(DISTANCE)
-GeoC_shp %>% st_drop_geometry() %>% filter(LINK == 14621076) %>% arrange(DISTANCE)
-```
-```{r}
-shp1 <- GeoC_shp %>% 
-    filter(LFNAME_lower == tolower("HARRISON ST")) %>%
-    group_by(LINK) %>% 
-    filter(DISTANCE %in% c(min(DISTANCE),max(DISTANCE)))
-  
-  shp2 <- GeoC_shp %>% 
-    filter(LFNAME_lower == tolower("SHAW ST")) %>%
-    group_by(LINK) %>% 
-    filter(DISTANCE %in% c(min(DISTANCE),max(DISTANCE)))
-  
-min(st_distance(shp1,shp2))
-
-tt8 <- st_distance(shp1,shp2)
-as.array(tt8)
-which(tt8 == min(tt8), arr.ind = TRUE)
-```
-
-
-```{r API Query}
-parking_packages <- search_packages("parking")
-
-P_ticket <- httr::GET("https://open.toronto.ca/dataset/parking-tickets/")
-P_ticket
-```
-
-
-
-```{r}
-plot(cars)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
