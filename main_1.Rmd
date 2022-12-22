@@ -445,13 +445,13 @@ PaTi_GP_over_id <- function(r) {
     st_transform(4326)
   
 
-  GP_sf_buf %>% st_intersects(PaTi_polygon_pl)
+  
   sparse_pl <-
     PaTi_polygon_pl %>% st_intersects(GP_sf_buf, sparse = T)
   
   
   
-  GP_sf_buf %>% st_intersects(PaTi_polygon_pt)
+  
   sparse_pt <-
     PaTi_polygon_pt %>% st_intersects(GP_sf_buf, sparse = T)
   
@@ -495,44 +495,33 @@ PaTi_GP_400_plot
 ```
 
 
+
 ```{r Green P map}
-dist_mat <- GP_sf %>% st_distance(PaTi_polygon_pl %>% st_centroid())
-PaTi_polygon_pl <- PaTi_polygon_pl %>% 
+PaTi_polygon_center <- PaTi_polygon_pl %>% st_centroid() %>% rbind(PaTi_polygon_pt %>% st_centroid())
+dist_mat <- GP_sf %>% st_distance(PaTi_polygon_center)
+
+PaTi_polygon_center <- PaTi_polygon_center %>% 
   ungroup() %>%
   mutate(row_num = row_number()) %>% 
   mutate(
     closest_GP = map_dbl(row_num, ~ which.min(dist_mat[,.x])),
-    GP_dist = map_dbl(row_num, ~ min(dist_mat[,.x])))
+    GP_dist = map_dbl(row_num, ~ min(dist_mat[,.x])),
+    GP_lon = map_dbl(closest_GP, ~ GP_data[GP_data$id==.x,]$lng),
+    GP_lat = map_dbl(closest_GP, ~ GP_data[GP_data$id==.x,]$lat))
 
-dist_mat <- GP_sf %>% st_distance(PaTi_polygon_pt %>% st_centroid())
-PaTi_polygon_pt <- PaTi_polygon_pt %>% 
-  ungroup() %>%
-  mutate(row_num = row_number()) %>% 
-  mutate(
-    closest_GP = map_dbl(row_num, ~ which.min(dist_mat[,.x])),
-    GP_dist = map_dbl(row_num, ~ min(dist_mat[,.x])))
+PaTi_polygon_center <- PaTi_polygon_center %>%
+  cbind(PaTi_polygon_center %>%
+          st_coordinates() %>%
+          as_tibble()) %>% 
+  mutate(color = paletteer_c("grDevices::rainbow", 20))
 
-PaTi_polygon_pl[,c("closest_GP","GP_dist")]
-GP_sf_closest <- GP_sf %>% inner_join(rbind(PaTi_polygon_pl[,c("closest_GP","GP_dist")],PaTi_polygon_pt[,c("closest_GP","GP_dist")]) %>% st_drop_geometry(),by = c("id"="closest_GP"))
+PaTi_polygon_pl <- PaTi_polygon_pl %>% left_join(PaTi_polygon_center %>% select(closest_GP,GP_dist,infraction_code,color) %>% st_drop_geometry())
 
-GP_sf_closest_buf <- GP_sf_closest %>% st_transform(2952)
-GP_polygons <- map2(GP_sf_closest_buf$geometry,GP_sf_closest_buf$GP_dist, ~st_buffer(.x,.y))
+PaTi_polygon_pt <- PaTi_polygon_pt %>% left_join(PaTi_polygon_center %>% select(closest_GP,GP_dist,infraction_code,color) %>% st_drop_geometry())
 
-GP_sf_closest_buf <- GP_sf_closest_buf %>% 
-  st_drop_geometry() %>%
-  mutate(row_num = row_number()) %>%
-  mutate(geometry = map(row_num, ~ tt[[.x]])) %>% 
-  st_as_sf(sf_column_name = "geometry",crs = 2952) %>% 
-  mutate(color = paletteer_c("grDevices::rainbow", 20)) %>% 
-  st_transform(4326)
+GP_sf_closest <- GP_sf %>% inner_join(PaTi_polygon_center %>% st_drop_geometry(),by = c("id"="closest_GP"))
 
-PaTi_polygon_pl <- PaTi_polygon_pl %>% left_join(GP_sf_closest_buf %>% st_drop_geometry() %>% select(id,color),by = c("closest_GP" = "id"))
-
-PaTi_polygon_pt <- PaTi_polygon_pt %>% left_join(GP_sf_closest_buf %>% st_drop_geometry() %>% select(id,color),by = c("closest_GP" = "id"))
-
-
-
-leaflet() %>% 
+PaTi_GP_map <- leaflet() %>% 
   addProviderTiles(providers$CartoDB.Positron) %>% 
   addPolygons(data = PaTi_polygon_pl,
               popup=paste(#"<b>Infraction Code</b>",PaTi_polygon_pl$infraction_code,"<br>",
@@ -550,12 +539,12 @@ leaflet() %>%
                           "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pt$set_fine_amount),"<br>"),
               label = ~ paste0("Infraction Code ", infraction_code),
               color = ~ color) %>% 
-  addPolygons(data = GP_sf_closest_buf,
-              popup=paste(
-                          "<b>Address:</b>",GP_sf_closest_buf$address,"<br>",
-                          "<b>Rate:</b>",GP_sf_closest_buf$rate),
-              label = ~ paste0("Green P id: ", id),
-              color = ~ color) %>% 
+  # addPolygons(data = GP_sf_closest_buf,
+  #             popup=paste(
+  #                         "<b>Address:</b>",GP_sf_closest_buf$address,"<br>",
+  #                         "<b>Rate:</b>",GP_sf_closest_buf$rate),
+  #             label = ~ paste0("Green P id: ", id),
+  #             color = ~ color) %>% 
   addMarkers(data = GP_sf_closest,
              # icon = makeIcon("https://www.iconpacks.net/icons/2/free-location-icon-2955-thumb.png", iconWidth = 16, iconHeight = 16),
               #   icon = makeIcon("my-icon.png", iconWidth = 16, iconHeight = 16),
@@ -564,8 +553,19 @@ leaflet() %>%
                           "<b>Rate:</b>",GP_sf_closest_buf$rate),
               label = ~ paste0("Green P id: ", id))
 
-makeIcon
+
+for (i in 1:nrow(PaTi_polygon_center)){
+PaTi_GP_map <- PaTi_GP_map %>% 
+  addPolylines(
+      lng = c(PaTi_polygon_center$X[i],PaTi_polygon_center$GP_lon[i]),
+      lat = c(PaTi_polygon_center$Y[i],PaTi_polygon_center$GP_lat[i]),
+      color = PaTi_polygon_center$color[i],
+      popup=paste("<b>Distance:</b>",round(PaTi_polygon_center$GP_dist[i]),"m","<br>"))
+}
+
+PaTi_GP_map
 ```
+
 
 ```{r neighbourhoods API}
 ngbh_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhoods/")
@@ -600,9 +600,7 @@ ngbh_prof_list <- opendatatoronto::list_package_resources("https://open.toronto.
 ngbh_prof_data <- ngbh_prof_list[2,] %>% get_resource()
 GeoC_shp
 
-ngbh_shp %>% filter(str_(AREA_NAME,"Etobicoke"))
-str_which(ngbh_shp$AREA_NAME,"Etobicoke")
-
+PaTi_polygon_pl
 
 ```
 
