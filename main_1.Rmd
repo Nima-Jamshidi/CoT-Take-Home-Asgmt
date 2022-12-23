@@ -19,12 +19,8 @@ In this notebook, I am going to study the most frequent parking infractions in T
 First step is to install and load the required packages.
 
 ```{r packages}
-# suppressPackageStartupMessages(library(httr))
-# suppressPackageStartupMessages(library(jsonlite))
-#install.packages("opendatatoronto")
 suppressPackageStartupMessages(library(opendatatoronto))
 suppressPackageStartupMessages(library(ckanr))
-#> Loading required package: DBI
 suppressPackageStartupMessages(library(readr))
 suppressPackageStartupMessages(library(vroom))
 suppressPackageStartupMessages(library(tidyverse))
@@ -35,7 +31,13 @@ suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(paletteer))
 ```
 
-```{r parking ticket query 1,eval = FALSE}
+## Parking Tickets
+Here I wrote a function for getting data for any year available on the website. There are a few note:
+- `opendatatoronto` package has problem with pulling `.csv` files. This is done manually here.
+- For some of the years, the `.csv` file is corrupt. The Unicode requires adjustment. This function does that.
+- For some of the years, the data is split into different files. This function handles that as well and combines the data into one object.
+
+```{r parking ticket API 1,eval = FALSE}
 PaTi_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_data_tot <- tibble()
@@ -112,21 +114,23 @@ PaTi_retrieve <- function(i){
 
 ```
 
-```{r parking ticket query 2, warning = FALSE, eval = FALSE}
-for (i in str_which(PaTi_list$name, "parking-tickets-\\d")) {
-  print(paste(str_extract(PaTi_list$name[i],"\\d+"),"started."))
-  res <- PaTi_retrieve(i)
-  print(paste(str_extract(PaTi_list$name[i],"\\d+"),"retrieval done!"))
-  PaTi_data_tot <- PaTi_data_tot %>% rbind(res)
-}
-rm(Col_type,Pati_list,res,i,Corrupted_csv)
-saveRDS(PaTi_data_tot,"PaTi_data_tot.rds")
+Originally I pulled the data for all the available years. It had more than 30 million rows. Here you can find the related codes commented out. We will use 2020 data only.
+
+```{r parking ticket API 2, warning = FALSE, eval = FALSE}
+# for (i in str_which(PaTi_list$name, "parking-tickets-\\d")) {
+#   print(paste(str_extract(PaTi_list$name[i],"\\d+"),"started."))
+#   res <- PaTi_retrieve(i)
+#   print(paste(str_extract(PaTi_list$name[i],"\\d+"),"retrieval done!"))
+#   PaTi_data_tot <- PaTi_data_tot %>% rbind(res)
+# }
+# rm(Col_type,Pati_list,res,i,Corrupted_csv)
+# saveRDS(PaTi_data_tot,"PaTi_data_tot.rds")
+# PaTi_data_tot <- readRDS("PaTi_data_tot.rds") %>% filter(date_of_infraction>20200000)
+PaTi_data_tot <- PaTi_retrieve(13)
 ```
 
+The data is wrangled. you can find the Infraction Codes sorted with the highest occurrence (`n_tot`) at top.
 
-```{r parking ticket query 3, warning = FALSE}
-PaTi_data_tot <- readRDS("PaTi_data_tot.rds") %>% filter(date_of_infraction>20200000)
-```
 ```{r parking ticket explore}
 Pati_rank <- PaTi_data_tot %>% 
   group_by(infraction_code, infraction_description) %>% 
@@ -137,9 +141,13 @@ Pati_rank <- PaTi_data_tot %>%
   filter(row_num == 1) %>% 
   select(-n, -infraction_description2,-row_num) %>% 
   arrange(desc(n_tot))
+
+Pati_rank
 ```
 
-```{r geocoder}
+I use the suggested One Address Repository for geocoding.
+
+```{r geocoder API}
 GeoC_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/address-points-municipal-toronto-one-address-repository/")
 GeoC_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/address-points-municipal-toronto-one-address-repository/")
 GeoC_retrieve <- function() {
@@ -160,8 +168,10 @@ GeoC_retrieve <- function() {
 
 GeoC_shp <- GeoC_retrieve()
 GeoC_shp <- GeoC_shp %>% mutate(LFNAME_lower = tolower(LFNAME))
-
 ```
+
+I write the code required to geocode. 
+
 ```{r find point}
 PaTi_data_top20_split <- PaTi_data_tot %>%
   filter(infraction_code %in% Pati_rank$infraction_code[1:20]) %>% 
@@ -187,7 +197,7 @@ PaTi_data_top20_2 <- PaTi_data_top20_split[!PaTi_data_top20_split$group,] %>%
   mutate(location2 = tolower(str_trim(location2)),
          location4 = tolower(str_trim(location4)))
 ```
-
+There are occasions in the ticket data that the address is written as an intersection of two roads rather than an postal address. This is a challenge since the One Address Repository does not have such information. I designed a algorithm that would search One Address Repository for each of the road in an intersection, look for the closest pair of points among them and choose that as a geolocation of the intersection. This part takes a few minutes to compute.
 
 ```{r find point2, eval = FALSE}
 Intersection_geocoder <- function(location2,location4){
@@ -234,6 +244,7 @@ PaTi_data_top20 <- PaTi_data_top20_1 %>%
   filter(n == max(n)) %>% 
   arrange(desc(n))
 ```
+The One Address Repository has grouped addresses in `LINK`s that are street blocks. I use these LINKs to calculate the most common location for the top Infraction codes. Here you can see the map of the most common location for top Infraction codes. On an html-based veiwer you can hover over the map and click for more information about each locatio and infraction code.
 
 ```{r Q1 plot}
 fine_data <- PaTi_data_tot %>% group_by(infraction_code,set_fine_amount) %>% summarise(n=n()) %>% filter(n == max(n)) %>% select(-n)
@@ -350,6 +361,8 @@ PaTi_plot <- leaflet() %>%
 PaTi_plot
 ```
 
+## Green P parking
+I pull the json file from the suggested link for Green P parkings.
 
 ```{r Green P API}
 GP_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/green-p-parking/")
@@ -383,6 +396,8 @@ GP_sf <- GP_data %>%
 
 ```
 
+Not all Green P locations are close to the common infraction locations. Here you can see a graph that provides information about the distribution of Green P off-street parkings close to (up to 800 meters) each common infraction location.
+
 ```{r Green P tile}
 PaTi_GP <- tibble()
 PaTi_GP_over <- function(r) {
@@ -391,8 +406,6 @@ PaTi_GP_over <- function(r) {
     st_buffer(dist = r) %>%
     st_transform(4326)
   
-  
-  GP_sf_buf %>% st_intersects(PaTi_polygon_pl)
   sparse_pl <-
     PaTi_polygon_pl %>% st_intersects(GP_sf_buf, sparse = T)
   over_pl <-
@@ -403,7 +416,6 @@ PaTi_GP_over <- function(r) {
       no_GP = map_dbl(row_num,  ~ length(sparse_pl[[.x]]))
     )
   
-  GP_sf_buf %>% st_intersects(PaTi_polygon_pt)
   sparse_pt <-
     PaTi_polygon_pt %>% st_intersects(GP_sf_buf, sparse = T)
   over_pt <-
@@ -432,11 +444,13 @@ PaTi_GP_tile <- PaTi_GP %>%
         # panel.border = element_blank()
         )+
   scale_x_discrete(name = "Infraction code",expand=c(0,0))+
-  scale_y_continuous(name = "Green P Parking lot distance from\nthe most common location for an infraction code",expand=c(0,0))+
+  scale_y_continuous(name = "Green P Parking lot distance from\nthe most common location for an infraction code (m)",expand=c(0,0))+
   scale_fill_continuous(name = "number of\nGreen P\nparking lots")
   
 plot(PaTi_GP_tile)
 ```
+Here you can see the map of common infraction locations with their closest Green P parking connected to them with a line. On an html-based veiwer you can hover and click on the line, Green P Parking to gain more information.
+
 ```{r Green P map}
 PaTi_GP_over_id <- function(r) {
   GP_sf_buf <- GP_sf %>%
@@ -600,7 +614,88 @@ ngbh_prof_list <- opendatatoronto::list_package_resources("https://open.toronto.
 ngbh_prof_data <- ngbh_prof_list[2,] %>% get_resource()
 GeoC_shp
 
-PaTi_polygon_pl
+(ngbh_prof_data) %>% filter(Category == "Mobility")
+
+(ngbh_prof_data) %>% filter(X_id == 2370) %>% pivot_longer(cols = City.of.Toronto:Yorkdale.Glen.Park,
+                                  values_to = "value",
+                                  names_to = "neighbourhood") %>% 
+  filter(!is.na(str_match(neighbourhood,"Annex")))
+str_match(c("jasds","hjds"),"a")
+(ngbh_prof_data %>% filter(Category != "Language"))[1000:1575,]
+(ngbh_prof_data %>% select(Characteristic,X_id,Category) %>% filter(Category != "Language"))[1000:1575,]
+ngbh_prof_data %>% filter(X_id==947)
+ngbh_prof_data %>% filter(Category == "Income") %>% select(Characteristic,X_id,Category,-Data.Source,-Topic,everything())
+```
+
+
+```{r neighbourhoods API}
+
+sparse_neigh <- PaTi_polygon_center %>% st_intersects(ngbh_shp)
+is.na(sparse_neigh) <- lengths(sparse_neigh) == 0
+PaTi_polygon_center <- PaTi_polygon_center %>% ungroup() %>% mutate(neighbourhood = ngbh_shp[unlist(sparse_neigh),]$AREA_NAME)
+PaTi_polygon_center <- PaTi_polygon_center %>% mutate(neighbourhood = str_remove(neighbourhood,"\\(\\d+\\)"),
+                               neighbourhood = str_replace_all(neighbourhood,"([:alpha:]+)","\\1\\."),
+                               neighbourhood = str_remove_all(neighbourhood,"[^a-zA-Z\\.]"),
+                               neighbourhood = str_remove_all(neighbourhood,"\\.$"),
+                               )
+#8 Population density per square kilometre
+#947  Median total income in 2015 among recipients ($)
+#960 Average total income in 2015 among recipients ($)
+#1019 Income Median total income of households in 2015 ($)
+# 1152	Immigration and citizenship	Non-immigrants
+# 1153	Immigration and citizenship	Immigrants
+#1629	Housing	Owner
+# 1630	Housing	Renter
+
+#1703	Education	Total - Highest certificate, diploma or degree for the population aged 15 years an
+#1710	Education	University certificate, diploma or degree at bachelor level or above
+
+#1715	Education	Total - Highest certificate, diploma or degree for the population aged 25 to 64 ye
+#1725	Education	University certificate, diploma or degree at bachelor level or above
+
+
+
+
+#1966	Journey to work Total - Main mode of commuting for the employed labour force aged 15 years and over in #1967	Journey to work private households with a usual place of work or no fixed workplace address - 25% sample data	
+
+
+
+# 2368	Mobility Total - Mobility status 1 year ago - 25% sample data	
+# 2369	Mobility Non-movers	
+# 2370	Mobility Movers
+
+
+
+ngbh_filtered_data <- ngbh_prof_data %>% filter(X_id %in% c(8,1152,1153,1629,1630,1703,1710,1715,1725,1966,1967,2368,2369,2370)) %>%
+  pivot_longer(cols = City.of.Toronto:Yorkdale.Glen.Park,
+                                  values_to = "value",
+                                  names_to = "neighbourhood")
+
+ngbh_filtered_data_wide <- ngbh_filtered_data %>% 
+  select(X_id,neighbourhood,value) %>% 
+  mutate(value = as.numeric(gsub(",", "", value))) %>% 
+  pivot_wider(id_cols = c("neighbourhood"),
+              names_from = "X_id",
+              values_from = "value") 
+ngbh_filtered_data_wide <- ngbh_filtered_data_wide %>% 
+  mutate(pop_density = `8`/max(`8`),
+    Immigration_rate = `1153`/(`1153`+`1152`),
+         rent_rate = `1630`/(`1630`+`1629`),
+         young_University_rate = `1710`/(`1703`),
+         middle_University_rate = `1725`/(`1715`),
+         driver_rate = `1967`/(`1966`),
+         newly_moved_rate = `2370`/(`2370`+`2369`)) %>% 
+  select(-c(`8`,`1152`,`1153`,`1629`,`1630`,`1703`,`1710`,`1715`,`1725`,`1966`,`1967`,`2368`,`2369`,`2370`))
+
+ngbh_filtered_data_wide <- ngbh_filtered_data_wide %>% mutate(High_infraction = neighbourhood %in% PaTi_polygon_center$neighbourhood)
+
+logistic_model <- glm(High_infraction ~ ., family = binomial(), ngbh_filtered_data_wide %>% select(-neighbourhood))
+
+summary(logistic_model)
+```
+```{r}
+
+
 
 ```
 
