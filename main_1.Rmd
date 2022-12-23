@@ -37,7 +37,7 @@ Here I wrote a function for getting data for any year available on the website. 
 - For some of the years, the `.csv` file is corrupt. The Unicode requires adjustment. This function does that.
 - For some of the years, the data is split into different files. This function handles that as well and combines the data into one object.
 
-```{r parking ticket API 1,eval = FALSE}
+```{r parking ticket API 1,eval = TRUE}
 PaTi_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/parking-tickets/")
 PaTi_data_tot <- tibble()
@@ -116,7 +116,7 @@ PaTi_retrieve <- function(i){
 
 Originally I pulled the data for all the available years. It had more than 30 million rows. Here you can find the related codes commented out. We will use 2020 data only.
 
-```{r parking ticket API 2, warning = FALSE, eval = FALSE}
+```{r parking ticket API 2, warning = FALSE, eval = TRUE}
 # for (i in str_which(PaTi_list$name, "parking-tickets-\\d")) {
 #   print(paste(str_extract(PaTi_list$name[i],"\\d+"),"started."))
 #   res <- PaTi_retrieve(i)
@@ -177,19 +177,22 @@ PaTi_data_top20_split <- PaTi_data_tot %>%
   filter(infraction_code %in% Pati_rank$infraction_code[1:20]) %>% 
   mutate(group = grepl('^[[:punct:]]?\\d', location2))
 
-PaTi_data_top20_1 <-  PaTi_data_top20_split[PaTi_data_top20_split$group,] %>% 
-  group_by(infraction_code,location2) %>% 
-  summarise(n=n()) %>% 
-  rowwise() %>%
-  mutate(ADDRESS = str_extract(str_extract(location2,"^[:punct:]?\\d*((?<=\\d)[:alpha:](?=\\s))?"),"[^[:punct:]]+"),
-         LFNAME_lower = tolower(str_trim(sub(ADDRESS,"",location2)))) %>% 
-  left_join((GeoC_shp %>% select(GEO_ID,LINK,LFNAME_lower,ADDRESS)),by = c("LFNAME_lower","ADDRESS")) %>% 
-  group_by(infraction_code, LINK) %>%
-  summarise(n = sum(n,na.rm = TRUE)) %>% 
-  mutate(accurate_type = T,
-         reference_type = "LINK") %>% 
-  rename(reference = LINK)
+# PaTi_data_top20_1 <-  PaTi_data_top20_split[PaTi_data_top20_split$group,] %>% 
+#   group_by(infraction_code,location2) %>% 
+#   summarise(n=n()) %>% 
+#   rowwise() %>%
+#   mutate(ADDRESS = str_extract(str_extract(location2,"^[:punct:]?\\d*((?<=\\d)[:alpha:](?=\\s))?"),"[^[:punct:]]+"),
+#          LFNAME_lower = tolower(str_trim(sub(ADDRESS,"",location2)))) %>% 
+#   left_join((GeoC_shp %>% select(GEO_ID,LINK,LFNAME_lower,ADDRESS)),by = c("LFNAME_lower","ADDRESS")) %>% 
+#   group_by(infraction_code, LINK) %>%
+#   summarise(n = sum(n,na.rm = TRUE)) %>% 
+#   mutate(accurate_type = T,
+#          reference_type = "LINK") %>% 
+#   rename(reference = LINK)
+# 
+# saveRDS(PaTi_data_top20_1,"PaTi_data_top20_1.rds")
 
+PaTi_data_top20_1 <- readRDS("PaTi_data_top20_1.rds")
 PaTi_data_top20_2 <- PaTi_data_top20_split[!PaTi_data_top20_split$group,] %>%  
   group_by(infraction_code,location2,location4) %>% 
   summarise(n=n()) %>% 
@@ -451,66 +454,10 @@ plot(PaTi_GP_tile)
 ```
 Here you can see the map of common infraction locations with their closest Green P parking connected to them with a line. On an html-based veiwer you can hover and click on the line, Green P Parking to gain more information.
 
-```{r Green P map}
-PaTi_GP_over_id <- function(r) {
-  GP_sf_buf <- GP_sf %>%
-    st_transform(2952) %>%
-    st_buffer(dist = r) %>%
-    st_transform(4326)
-  
-
-  
-  sparse_pl <-
-    PaTi_polygon_pl %>% st_intersects(GP_sf_buf, sparse = T)
-  
-  
-  
-  
-  sparse_pt <-
-    PaTi_polygon_pt %>% st_intersects(GP_sf_buf, sparse = T)
-  
-  res <- unique(c(unlist(sparse_pl),unlist(sparse_pt)))
-  
-  return(res)
-}
-
-PaTi_GP_400_id <- PaTi_GP_over_id(400)
-GP_sf_buf <- GP_sf[PaTi_GP_400_id,] %>%
-    st_transform(2952) %>%
-    st_buffer(dist = 400) %>%
-    st_transform(4326)
-
-PaTi_GP_400_plot <- leaflet() %>% 
-  addProviderTiles(providers$CartoDB.Positron) %>% 
-  addPolygons(data = PaTi_polygon_pl,
-              popup=paste(#"<b>Infraction Code</b>",PaTi_polygon_pl$infraction_code,"<br>",
-                          "<b>Description:</b>",PaTi_polygon_pl$infraction_description,"<br>",
-                          "<b>Location:</b>",PaTi_polygon_pl$LFNAME,"<br>",
-                          "<b>Number of Infraction:</b>",PaTi_polygon_pl$no_infraction,"<br>",
-                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pl$set_fine_amount),"<br>"),
-              label = ~ paste0("Infraction Code ", infraction_code),
-              color = "#6e031e") %>% 
-  addPolygons(data = PaTi_polygon_pt,
-              popup=paste(
-                          "<b>Description:</b>",PaTi_polygon_pt$infraction_description,"<br>",
-                          "<b>Location:</b>",PaTi_polygon_pt$LFNAME,"<br>",
-                          "<b>Number of Infraction:</b>",PaTi_polygon_pt$no_infraction,"<br>",
-                          "<b>Infraction Fine:</b>",dollar_format()(PaTi_polygon_pt$set_fine_amount),"<br>"),
-              label = ~ paste0("Infraction Code ", infraction_code),
-              color = "#6e031e") %>% 
-  addPolygons(data = GP_sf_buf,
-              popup=paste(
-                          "<b>Address:</b>",GP_sf_buf$address,"<br>",
-                          "<b>Rate:</b>",GP_sf_buf$rate),
-              label = ~ paste0("Green P id: ", id),
-              color = "green") #%>% 
-
-PaTi_GP_400_plot
-```
 
 
 
-```{r Green P map}
+```{r Q2 plot}
 PaTi_polygon_center <- PaTi_polygon_pl %>% st_centroid() %>% rbind(PaTi_polygon_pt %>% st_centroid())
 dist_mat <- GP_sf %>% st_distance(PaTi_polygon_center)
 
@@ -563,8 +510,8 @@ PaTi_GP_map <- leaflet() %>%
              # icon = makeIcon("https://www.iconpacks.net/icons/2/free-location-icon-2955-thumb.png", iconWidth = 16, iconHeight = 16),
               #   icon = makeIcon("my-icon.png", iconWidth = 16, iconHeight = 16),
               popup=paste(
-                          "<b>Address:</b>",GP_sf_closest_buf$address,"<br>",
-                          "<b>Rate:</b>",GP_sf_closest_buf$rate),
+                          "<b>Address:</b>",GP_sf_closest$address,"<br>",
+                          "<b>Rate:</b>",GP_sf_closest$rate),
               label = ~ paste0("Green P id: ", id))
 
 
@@ -579,7 +526,9 @@ PaTi_GP_map <- PaTi_GP_map %>%
 
 PaTi_GP_map
 ```
+## Demographics
 
+Here, I pull the data about the neighbourhoods.
 
 ```{r neighbourhoods API}
 ngbh_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhoods/")
@@ -612,23 +561,12 @@ ngbh_shp <- ngbh_retrieve("https://open.toronto.ca/dataset/neighbourhoods/",5,"z
 ngbh_prof_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhood-profiles/")
 ngbh_prof_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/neighbourhood-profiles/")
 ngbh_prof_data <- ngbh_prof_list[2,] %>% get_resource()
-GeoC_shp
 
-(ngbh_prof_data) %>% filter(Category == "Mobility")
-
-(ngbh_prof_data) %>% filter(X_id == 2370) %>% pivot_longer(cols = City.of.Toronto:Yorkdale.Glen.Park,
-                                  values_to = "value",
-                                  names_to = "neighbourhood") %>% 
-  filter(!is.na(str_match(neighbourhood,"Annex")))
-str_match(c("jasds","hjds"),"a")
-(ngbh_prof_data %>% filter(Category != "Language"))[1000:1575,]
-(ngbh_prof_data %>% select(Characteristic,X_id,Category) %>% filter(Category != "Language"))[1000:1575,]
-ngbh_prof_data %>% filter(X_id==947)
-ngbh_prof_data %>% filter(Category == "Income") %>% select(Characteristic,X_id,Category,-Data.Source,-Topic,everything())
 ```
 
+Here I pull information about socio-economical features of the neighbourhoods and compare the ones with High Infraction or not. I use Logistic regression. The result shows that these features needs refinement. Perhaps better features should be obtained.
 
-```{r neighbourhoods API}
+```{r neighbourhoods analysis}
 
 sparse_neigh <- PaTi_polygon_center %>% st_intersects(ngbh_shp)
 is.na(sparse_neigh) <- lengths(sparse_neigh) == 0
@@ -693,14 +631,3 @@ logistic_model <- glm(High_infraction ~ ., family = binomial(), ngbh_filtered_da
 
 summary(logistic_model)
 ```
-```{r}
-
-
-
-```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
