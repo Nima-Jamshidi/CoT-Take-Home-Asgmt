@@ -8,6 +8,9 @@ output:
     toc: yes
   html_notebook:
     toc: yes
+  html_document:
+    toc: yes
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -554,10 +557,6 @@ ngbh_retrieve <- function(URL,No,format) {
   return(res)
 }
 
-URL = "https://open.toronto.ca/dataset/neighbourhoods/"
-No = 5
-format = "zip"
-
 ngbh_shp <- ngbh_retrieve("https://open.toronto.ca/dataset/neighbourhoods/",5,"zip")
 ngbh_prof_metadata <- opendatatoronto::show_package("https://open.toronto.ca/dataset/neighbourhood-profiles/")
 ngbh_prof_list <- opendatatoronto::list_package_resources("https://open.toronto.ca/dataset/neighbourhood-profiles/")
@@ -568,7 +567,6 @@ ngbh_prof_data <- ngbh_prof_list[2,] %>% get_resource()
 Here I pull information about socio-economical features of the neighbourhoods and compare the ones with High Infraction or not. I use Logistic regression. The result shows that these features needs refinement. Perhaps better features should be obtained.
 
 ```{r neighbourhoods analysis}
-
 sparse_neigh <- PaTi_polygon_center %>% st_intersects(ngbh_shp)
 is.na(sparse_neigh) <- lengths(sparse_neigh) == 0
 PaTi_polygon_center <- PaTi_polygon_center %>% ungroup() %>% mutate(neighbourhood = ngbh_shp[unlist(sparse_neigh),]$AREA_NAME)
