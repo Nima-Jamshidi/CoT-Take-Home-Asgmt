@@ -123,12 +123,8 @@ First step is to install and load the required packages.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\CommentTok{\# suppressPackageStartupMessages(library(httr))}
-\CommentTok{\# suppressPackageStartupMessages(library(jsonlite))}
-\CommentTok{\#install.packages("opendatatoronto")}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(opendatatoronto))}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(ckanr))}
-\CommentTok{\#\textgreater{} Loading required package: DBI}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(readr))}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(vroom))}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(tidyverse))}
@@ -136,8 +132,20 @@ First step is to install and load the required packages.
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(leaflet))}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(rjson))}
 \FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(scales))}
+\FunctionTok{suppressPackageStartupMessages}\NormalTok{(}\FunctionTok{library}\NormalTok{(paletteer))}
 \end{Highlighting}
 \end{Shaded}
+
+\hypertarget{parking-tickets}{%
+\subsection{Parking Tickets}\label{parking-tickets}}
+
+Here I wrote a function for getting data for any year available on the
+website. There are a few note: - \texttt{opendatatoronto} package has
+problem with pulling \texttt{.csv} files. This is done manually here. -
+For some of the years, the \texttt{.csv} file is corrupt. The Unicode
+requires adjustment. This function does that. - For some of the years,
+the data is split into different files. This function handles that as
+well and combines the data into one object.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -217,24 +225,27 @@ First step is to install and load the required packages.
 \end{Highlighting}
 \end{Shaded}
 
-\begin{Shaded}
-\begin{Highlighting}[]
-\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \FunctionTok{str\_which}\NormalTok{(PaTi\_list}\SpecialCharTok{$}\NormalTok{name, }\StringTok{"parking{-}tickets{-}}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d"}\NormalTok{)) \{}
-  \FunctionTok{print}\NormalTok{(}\FunctionTok{paste}\NormalTok{(}\FunctionTok{str\_extract}\NormalTok{(PaTi\_list}\SpecialCharTok{$}\NormalTok{name[i],}\StringTok{"}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d+"}\NormalTok{),}\StringTok{"started."}\NormalTok{))}
-\NormalTok{  res }\OtherTok{\textless{}{-}} \FunctionTok{PaTi\_retrieve}\NormalTok{(i)}
-  \FunctionTok{print}\NormalTok{(}\FunctionTok{paste}\NormalTok{(}\FunctionTok{str\_extract}\NormalTok{(PaTi\_list}\SpecialCharTok{$}\NormalTok{name[i],}\StringTok{"}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d+"}\NormalTok{),}\StringTok{"retrieval done!"}\NormalTok{))}
-\NormalTok{  PaTi\_data\_tot }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_data\_tot }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{rbind}\NormalTok{(res)}
-\NormalTok{\}}
-\FunctionTok{rm}\NormalTok{(Col\_type,Pati\_list,res,i,Corrupted\_csv)}
-\FunctionTok{saveRDS}\NormalTok{(PaTi\_data\_tot,}\StringTok{"PaTi\_data\_tot.rds"}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
+Originally I pulled the data for all the available years. It had more
+than 30 million rows. Here you can find the related codes commented out.
+We will use 2020 data only.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{PaTi\_data\_tot }\OtherTok{\textless{}{-}} \FunctionTok{readRDS}\NormalTok{(}\StringTok{"PaTi\_data\_tot.rds"}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{filter}\NormalTok{(date\_of\_infraction}\SpecialCharTok{\textgreater{}}\DecValTok{20200000}\NormalTok{)}
+\CommentTok{\# for (i in str\_which(PaTi\_list$name, "parking{-}tickets{-}\textbackslash{}\textbackslash{}d")) \{}
+\CommentTok{\#   print(paste(str\_extract(PaTi\_list$name[i],"\textbackslash{}\textbackslash{}d+"),"started."))}
+\CommentTok{\#   res \textless{}{-} PaTi\_retrieve(i)}
+\CommentTok{\#   print(paste(str\_extract(PaTi\_list$name[i],"\textbackslash{}\textbackslash{}d+"),"retrieval done!"))}
+\CommentTok{\#   PaTi\_data\_tot \textless{}{-} PaTi\_data\_tot \%\textgreater{}\% rbind(res)}
+\CommentTok{\# \}}
+\CommentTok{\# rm(Col\_type,Pati\_list,res,i,Corrupted\_csv)}
+\CommentTok{\# saveRDS(PaTi\_data\_tot,"PaTi\_data\_tot.rds")}
+\CommentTok{\# PaTi\_data\_tot \textless{}{-} readRDS("PaTi\_data\_tot.rds") \%\textgreater{}\% filter(date\_of\_infraction\textgreater{}20200000)}
+\NormalTok{PaTi\_data\_tot }\OtherTok{\textless{}{-}} \FunctionTok{PaTi\_retrieve}\NormalTok{(}\DecValTok{13}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
+
+The data is wrangled. you can find the Infraction Codes sorted with the
+highest occurrence (\texttt{n\_tot}) at top.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -254,6 +265,32 @@ First step is to install and load the required packages.
 ## `summarise()` has grouped output by 'infraction_code'. You can override using
 ## the `.groups` argument.
 \end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Pati\_rank}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 156 x 3
+## # Groups:   infraction_code [156]
+##    infraction_code infraction_description          n_tot
+##              <dbl> <chr>                           <int>
+##  1               3 PARK ON PRIV PROP NO CONSENT   338199
+##  2             207 PARK MACHINE-REQD FEE NOT PAID 215036
+##  3               5 PARK-HWY DRNG PROH TIMES/DAYS  204658
+##  4              29 PARK-SIGNED HWY-PROHIBIT DY/TM 161727
+##  5               9 STOP-HWY-PROHIBITED TIMES/DAYS  69285
+##  6               2 PARK - LONGER THAN 3 HOURS      67395
+##  7               8 PARK-SIGNED HWY-PROHIBIT DY/TM  43255
+##  8               6 PARK-SIGNED HWY-EXC PERMT TIME  39764
+##  9               4 PARK ON MUN PROP NO CONSENT     38870
+## 10             406 PARK-VEH. W/O VALID ONT PLATE   27665
+## # ... with 146 more rows
+\end{verbatim}
+
+I use the suggested One Address Repository for geocoding.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -281,9 +318,9 @@ First step is to install and load the required packages.
 
 \begin{verbatim}
 ## Reading layer `ADDRESS_POINT_WGS84' from data source 
-##   `C:\Users\nimad\AppData\Local\Temp\Rtmp2BtY4T\eba07dba-8645-45f8-950c-0381a0dcaa1b\ADDRESS_POINT_WGS84.shp' 
+##   `C:\Users\nimad\AppData\Local\Temp\RtmpukQkbF\eba07dba-8645-45f8-950c-0381a0dcaa1b\ADDRESS_POINT_WGS84.shp' 
 ##   using driver `ESRI Shapefile'
-## Simple feature collection with 525368 features and 22 fields
+## Simple feature collection with 525353 features and 22 fields
 ## Geometry type: POINT
 ## Dimension:     XY
 ## Bounding box:  xmin: -8865288 ymin: 5401672 xmax: -8807754 ymax: 5442900
@@ -296,36 +333,30 @@ First step is to install and load the required packages.
 \end{Highlighting}
 \end{Shaded}
 
+I write the code required to geocode.
+
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{PaTi\_data\_top20\_split }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_data\_tot }\SpecialCharTok{\%\textgreater{}\%}
   \FunctionTok{filter}\NormalTok{(infraction\_code }\SpecialCharTok{\%in\%}\NormalTok{ Pati\_rank}\SpecialCharTok{$}\NormalTok{infraction\_code[}\DecValTok{1}\SpecialCharTok{:}\DecValTok{20}\NormalTok{]) }\SpecialCharTok{\%\textgreater{}\%} 
   \FunctionTok{mutate}\NormalTok{(}\AttributeTok{group =} \FunctionTok{grepl}\NormalTok{(}\StringTok{\textquotesingle{}\^{}[[:punct:]]?}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d\textquotesingle{}}\NormalTok{, location2))}
 
-\NormalTok{PaTi\_data\_top20\_1 }\OtherTok{\textless{}{-}}\NormalTok{  PaTi\_data\_top20\_split[PaTi\_data\_top20\_split}\SpecialCharTok{$}\NormalTok{group,] }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{group\_by}\NormalTok{(infraction\_code,location2) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{summarise}\NormalTok{(}\AttributeTok{n=}\FunctionTok{n}\NormalTok{()) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{rowwise}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%}
-  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{ADDRESS =} \FunctionTok{str\_extract}\NormalTok{(}\FunctionTok{str\_extract}\NormalTok{(location2,}\StringTok{"\^{}[:punct:]?}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d*((?\textless{}=}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d)[:alpha:](?=}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{s))?"}\NormalTok{),}\StringTok{"[\^{}[:punct:]]+"}\NormalTok{),}
-         \AttributeTok{LFNAME\_lower =} \FunctionTok{tolower}\NormalTok{(}\FunctionTok{str\_trim}\NormalTok{(}\FunctionTok{sub}\NormalTok{(ADDRESS,}\StringTok{""}\NormalTok{,location2)))) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{left\_join}\NormalTok{((GeoC\_shp }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{select}\NormalTok{(GEO\_ID,LINK,LFNAME\_lower,ADDRESS)),}\AttributeTok{by =} \FunctionTok{c}\NormalTok{(}\StringTok{"LFNAME\_lower"}\NormalTok{,}\StringTok{"ADDRESS"}\NormalTok{)) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{group\_by}\NormalTok{(infraction\_code, LINK) }\SpecialCharTok{\%\textgreater{}\%}
-  \FunctionTok{summarise}\NormalTok{(}\AttributeTok{n =} \FunctionTok{sum}\NormalTok{(n,}\AttributeTok{na.rm =} \ConstantTok{TRUE}\NormalTok{)) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{accurate\_type =}\NormalTok{ T,}
-         \AttributeTok{reference\_type =} \StringTok{"LINK"}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{rename}\NormalTok{(}\AttributeTok{reference =}\NormalTok{ LINK)}
-\end{Highlighting}
-\end{Shaded}
+\CommentTok{\# PaTi\_data\_top20\_1 \textless{}{-}  PaTi\_data\_top20\_split[PaTi\_data\_top20\_split$group,] \%\textgreater{}\% }
+\CommentTok{\#   group\_by(infraction\_code,location2) \%\textgreater{}\% }
+\CommentTok{\#   summarise(n=n()) \%\textgreater{}\% }
+\CommentTok{\#   rowwise() \%\textgreater{}\%}
+\CommentTok{\#   mutate(ADDRESS = str\_extract(str\_extract(location2,"\^{}[:punct:]?\textbackslash{}\textbackslash{}d*((?\textless{}=\textbackslash{}\textbackslash{}d)[:alpha:](?=\textbackslash{}\textbackslash{}s))?"),"[\^{}[:punct:]]+"),}
+\CommentTok{\#          LFNAME\_lower = tolower(str\_trim(sub(ADDRESS,"",location2)))) \%\textgreater{}\% }
+\CommentTok{\#   left\_join((GeoC\_shp \%\textgreater{}\% select(GEO\_ID,LINK,LFNAME\_lower,ADDRESS)),by = c("LFNAME\_lower","ADDRESS")) \%\textgreater{}\% }
+\CommentTok{\#   group\_by(infraction\_code, LINK) \%\textgreater{}\%}
+\CommentTok{\#   summarise(n = sum(n,na.rm = TRUE)) \%\textgreater{}\% }
+\CommentTok{\#   mutate(accurate\_type = T,}
+\CommentTok{\#          reference\_type = "LINK") \%\textgreater{}\% }
+\CommentTok{\#   rename(reference = LINK)}
+\CommentTok{\# }
+\CommentTok{\# saveRDS(PaTi\_data\_top20\_1,"PaTi\_data\_top20\_1.rds")}
 
-\begin{verbatim}
-## `summarise()` has grouped output by 'infraction_code'. You can override using
-## the `.groups` argument.
-## `summarise()` has grouped output by 'infraction_code'. You can override using
-## the `.groups` argument.
-\end{verbatim}
-
-\begin{Shaded}
-\begin{Highlighting}[]
+\NormalTok{PaTi\_data\_top20\_1 }\OtherTok{\textless{}{-}} \FunctionTok{readRDS}\NormalTok{(}\StringTok{"PaTi\_data\_top20\_1.rds"}\NormalTok{)}
 \NormalTok{PaTi\_data\_top20\_2 }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_data\_top20\_split[}\SpecialCharTok{!}\NormalTok{PaTi\_data\_top20\_split}\SpecialCharTok{$}\NormalTok{group,] }\SpecialCharTok{\%\textgreater{}\%}  
   \FunctionTok{group\_by}\NormalTok{(infraction\_code,location2,location4) }\SpecialCharTok{\%\textgreater{}\%} 
   \FunctionTok{summarise}\NormalTok{(}\AttributeTok{n=}\FunctionTok{n}\NormalTok{()) }\SpecialCharTok{\%\textgreater{}\%} 
@@ -339,6 +370,14 @@ First step is to install and load the required packages.
 ## `summarise()` has grouped output by 'infraction_code', 'location2'. You can
 ## override using the `.groups` argument.
 \end{verbatim}
+
+There are occasions in the ticket data that the address is written as an
+intersection of two roads rather than an postal address. This is a
+challenge since the One Address Repository does not have such
+information. I designed a algorithm that would search One Address
+Repository for each of the road in an intersection, look for the closest
+pair of points among them and choose that as a geolocation of the
+intersection. This part takes a few minutes to compute.
 
 \begin{Shaded}
 \begin{Highlighting}[]
@@ -398,6 +437,13 @@ First step is to install and load the required packages.
 \end{Highlighting}
 \end{Shaded}
 
+The One Address Repository has grouped addresses in \texttt{LINK}s that
+are street blocks. I use these LINKs to calculate the most common
+location for the top Infraction codes. Here you can see the map of the
+most common location for top Infraction codes. On an html-based veiwer
+you can hover over the map and click for more information about each
+locatio and infraction code.
+
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{fine\_data }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_data\_tot }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{group\_by}\NormalTok{(infraction\_code,set\_fine\_amount) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{summarise}\NormalTok{(}\AttributeTok{n=}\FunctionTok{n}\NormalTok{()) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{filter}\NormalTok{(n }\SpecialCharTok{==} \FunctionTok{max}\NormalTok{(n)) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{n)}
@@ -452,7 +498,7 @@ First step is to install and load the required packages.
 \NormalTok{    data }\SpecialCharTok{\%\textgreater{}\%}
       \CommentTok{\# summarise(n\_link = n()) \%\textgreater{}\%}
       \CommentTok{\# filter(n\_link == 1) \%\textgreater{}\%}
-      \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{3347}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
+      \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{2952}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
       \FunctionTok{st\_buffer}\NormalTok{(}\AttributeTok{dist =} \DecValTok{10}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
       \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{4326}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} 
       \FunctionTok{st\_cast}\NormalTok{(}\StringTok{"POLYGON"}\NormalTok{)}
@@ -460,7 +506,7 @@ First step is to install and load the required packages.
 \NormalTok{    data }\SpecialCharTok{\%\textgreater{}\%}
       \CommentTok{\# summarise(n\_link = n()) \%\textgreater{}\%}
       \FunctionTok{st\_cast}\NormalTok{(}\StringTok{"LINESTRING"}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
-      \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{3347}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
+      \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{2952}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
       \FunctionTok{st\_buffer}\NormalTok{(}\AttributeTok{dist =} \DecValTok{10}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
       \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{4326}\NormalTok{)}
 \NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (data}\SpecialCharTok{$}\NormalTok{n\_link[}\DecValTok{1}\NormalTok{] }\SpecialCharTok{==} \DecValTok{3}\NormalTok{) \{}
@@ -544,12 +590,17 @@ First step is to install and load the required packages.
 
 \includegraphics{main_1_files/figure-latex/Q1 plot-1.pdf}
 
+\hypertarget{green-p-parking}{%
+\subsection{Green P parking}\label{green-p-parking}}
+
+I pull the json file from the suggested link for Green P parkings.
+
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{GP\_metadata }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{show\_package}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/green{-}p{-}parking/"}\NormalTok{)}
 \NormalTok{GP\_list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/green{-}p{-}parking/"}\NormalTok{)}
 \NormalTok{GP\_retrieve }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(URL,No,format) \{}
-\NormalTok{  list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/green{-}p{-}parking/"}\NormalTok{)}
+\NormalTok{  list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(URL)}
 \NormalTok{  data\_id }\OtherTok{\textless{}{-}}\NormalTok{ list[[No, }\StringTok{"id"}\NormalTok{]]}
 \NormalTok{  resource }\OtherTok{\textless{}{-}}
     \FunctionTok{resource\_show}\NormalTok{(data\_id, }\AttributeTok{url =} \StringTok{"https://ckan0.cf.opendata.inter.prod{-}toronto.ca/"}\NormalTok{, }\AttributeTok{as =} \StringTok{"list"}\NormalTok{)}
@@ -577,17 +628,20 @@ First step is to install and load the required packages.
 \end{Highlighting}
 \end{Shaded}
 
+Not all Green P locations are close to the common infraction locations.
+Here you can see a graph that provides information about the
+distribution of Green P off-street parkings close to (up to 800 meters)
+each common infraction location.
+
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{PaTi\_GP }\OtherTok{\textless{}{-}} \FunctionTok{tibble}\NormalTok{()}
 \NormalTok{PaTi\_GP\_over }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(r) \{}
 \NormalTok{  GP\_sf\_buf }\OtherTok{\textless{}{-}}\NormalTok{ GP\_sf }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{3347}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
+    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{2952}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
     \FunctionTok{st\_buffer}\NormalTok{(}\AttributeTok{dist =}\NormalTok{ r) }\SpecialCharTok{\%\textgreater{}\%}
     \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{4326}\NormalTok{)}
   
-  
-\NormalTok{  GP\_sf\_buf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(PaTi\_polygon\_pl)}
 \NormalTok{  sparse\_pl }\OtherTok{\textless{}{-}}
 \NormalTok{    PaTi\_polygon\_pl }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(GP\_sf\_buf, }\AttributeTok{sparse =}\NormalTok{ T)}
 \NormalTok{  over\_pl }\OtherTok{\textless{}{-}}
@@ -598,7 +652,6 @@ First step is to install and load the required packages.
       \AttributeTok{no\_GP =} \FunctionTok{map\_dbl}\NormalTok{(row\_num,  }\SpecialCharTok{\textasciitilde{}} \FunctionTok{length}\NormalTok{(sparse\_pl[[.x]]))}
 \NormalTok{    )}
   
-\NormalTok{  GP\_sf\_buf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(PaTi\_polygon\_pt)}
 \NormalTok{  sparse\_pt }\OtherTok{\textless{}{-}}
 \NormalTok{    PaTi\_polygon\_pt }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(GP\_sf\_buf, }\AttributeTok{sparse =}\NormalTok{ T)}
 \NormalTok{  over\_pt }\OtherTok{\textless{}{-}}
@@ -627,45 +680,74 @@ First step is to install and load the required packages.
         \CommentTok{\# panel.border = element\_blank()}
 \NormalTok{        )}\SpecialCharTok{+}
   \FunctionTok{scale\_x\_discrete}\NormalTok{(}\AttributeTok{name =} \StringTok{"Infraction code"}\NormalTok{,}\AttributeTok{expand=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{))}\SpecialCharTok{+}
-  \FunctionTok{scale\_y\_continuous}\NormalTok{(}\AttributeTok{name =} \StringTok{"Green P Parking lot distance from}\SpecialCharTok{\textbackslash{}n}\StringTok{the most common location for an infraction code"}\NormalTok{,}\AttributeTok{expand=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{))}\SpecialCharTok{+}
+  \FunctionTok{scale\_y\_continuous}\NormalTok{(}\AttributeTok{name =} \StringTok{"Green P Parking lot distance from}\SpecialCharTok{\textbackslash{}n}\StringTok{the most common location for an infraction code (m)"}\NormalTok{,}\AttributeTok{expand=}\FunctionTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{,}\DecValTok{0}\NormalTok{))}\SpecialCharTok{+}
   \FunctionTok{scale\_fill\_continuous}\NormalTok{(}\AttributeTok{name =} \StringTok{"number of}\SpecialCharTok{\textbackslash{}n}\StringTok{Green P}\SpecialCharTok{\textbackslash{}n}\StringTok{parking lots"}\NormalTok{)}
   
 \FunctionTok{plot}\NormalTok{(PaTi\_GP\_tile)}
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{main_1_files/figure-latex/Green P tile-1.pdf}
+\includegraphics{main_1_files/figure-latex/Green P tile-1.pdf} Here you
+can see the map of common infraction locations with their closest Green
+P parking connected to them with a line. On an html-based veiwer you can
+hover and click on the line, Green P Parking to gain more information.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{PaTi\_GP\_over\_id }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(r) \{}
-\NormalTok{  GP\_sf\_buf }\OtherTok{\textless{}{-}}\NormalTok{ GP\_sf }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{3347}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_buffer}\NormalTok{(}\AttributeTok{dist =}\NormalTok{ r) }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{4326}\NormalTok{)}
-  
-  
-\NormalTok{  GP\_sf\_buf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(PaTi\_polygon\_pl)}
-\NormalTok{  sparse\_pl }\OtherTok{\textless{}{-}}
-\NormalTok{    PaTi\_polygon\_pl }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(GP\_sf\_buf, }\AttributeTok{sparse =}\NormalTok{ T)}
-  
-  
-\NormalTok{  GP\_sf\_buf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(PaTi\_polygon\_pt)}
-\NormalTok{  sparse\_pt }\OtherTok{\textless{}{-}}
-\NormalTok{    PaTi\_polygon\_pt }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(GP\_sf\_buf, }\AttributeTok{sparse =}\NormalTok{ T)}
-  
-\NormalTok{  res }\OtherTok{\textless{}{-}} \FunctionTok{unique}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\FunctionTok{unlist}\NormalTok{(sparse\_pl),}\FunctionTok{unlist}\NormalTok{(sparse\_pt)))}
-  
-  \FunctionTok{return}\NormalTok{(res)}
-\NormalTok{\}}
+\NormalTok{PaTi\_polygon\_center }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_pl }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_centroid}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{rbind}\NormalTok{(PaTi\_polygon\_pt }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_centroid}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
 
-\NormalTok{PaTi\_GP\_400\_id }\OtherTok{\textless{}{-}} \FunctionTok{PaTi\_GP\_over\_id}\NormalTok{(}\DecValTok{400}\NormalTok{)}
-\NormalTok{GP\_sf\_buf }\OtherTok{\textless{}{-}}\NormalTok{ GP\_sf[PaTi\_GP\_400\_id,] }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{3347}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_buffer}\NormalTok{(}\AttributeTok{dist =} \DecValTok{400}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%}
-    \FunctionTok{st\_transform}\NormalTok{(}\DecValTok{4326}\NormalTok{)}
+\begin{verbatim}
+## Warning in st_centroid.sf(.): st_centroid assumes attributes are constant over
+## geometries of x
 
-\NormalTok{PaTi\_GP\_400\_plot }\OtherTok{\textless{}{-}} \FunctionTok{leaflet}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%} 
+## Warning in st_centroid.sf(.): st_centroid assumes attributes are constant over
+## geometries of x
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{dist\_mat }\OtherTok{\textless{}{-}}\NormalTok{ GP\_sf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_distance}\NormalTok{(PaTi\_polygon\_center)}
+
+\NormalTok{PaTi\_polygon\_center }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{ungroup}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{row\_num =} \FunctionTok{row\_number}\NormalTok{()) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{mutate}\NormalTok{(}
+    \AttributeTok{closest\_GP =} \FunctionTok{map\_dbl}\NormalTok{(row\_num, }\SpecialCharTok{\textasciitilde{}} \FunctionTok{which.min}\NormalTok{(dist\_mat[,.x])),}
+    \AttributeTok{GP\_dist =} \FunctionTok{map\_dbl}\NormalTok{(row\_num, }\SpecialCharTok{\textasciitilde{}} \FunctionTok{min}\NormalTok{(dist\_mat[,.x])),}
+    \AttributeTok{GP\_lon =} \FunctionTok{map\_dbl}\NormalTok{(closest\_GP, }\SpecialCharTok{\textasciitilde{}}\NormalTok{ GP\_data[GP\_data}\SpecialCharTok{$}\NormalTok{id}\SpecialCharTok{==}\NormalTok{.x,]}\SpecialCharTok{$}\NormalTok{lng),}
+    \AttributeTok{GP\_lat =} \FunctionTok{map\_dbl}\NormalTok{(closest\_GP, }\SpecialCharTok{\textasciitilde{}}\NormalTok{ GP\_data[GP\_data}\SpecialCharTok{$}\NormalTok{id}\SpecialCharTok{==}\NormalTok{.x,]}\SpecialCharTok{$}\NormalTok{lat))}
+
+\NormalTok{PaTi\_polygon\_center }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{cbind}\NormalTok{(PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%}
+          \FunctionTok{st\_coordinates}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%}
+          \FunctionTok{as\_tibble}\NormalTok{()) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{color =} \FunctionTok{paletteer\_c}\NormalTok{(}\StringTok{"grDevices::rainbow"}\NormalTok{, }\DecValTok{20}\NormalTok{))}
+
+\NormalTok{PaTi\_polygon\_pl }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_pl }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{left\_join}\NormalTok{(PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{select}\NormalTok{(closest\_GP,GP\_dist,infraction\_code,color) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_drop\_geometry}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Joining, by = "infraction_code"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{PaTi\_polygon\_pt }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_pt }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{left\_join}\NormalTok{(PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{select}\NormalTok{(closest\_GP,GP\_dist,infraction\_code,color) }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_drop\_geometry}\NormalTok{())}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Joining, by = "infraction_code"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{GP\_sf\_closest }\OtherTok{\textless{}{-}}\NormalTok{ GP\_sf }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{inner\_join}\NormalTok{(PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_drop\_geometry}\NormalTok{(),}\AttributeTok{by =} \FunctionTok{c}\NormalTok{(}\StringTok{"id"}\OtherTok{=}\StringTok{"closest\_GP"}\NormalTok{))}
+
+\NormalTok{PaTi\_GP\_map }\OtherTok{\textless{}{-}} \FunctionTok{leaflet}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%} 
   \FunctionTok{addProviderTiles}\NormalTok{(providers}\SpecialCharTok{$}\NormalTok{CartoDB.Positron) }\SpecialCharTok{\%\textgreater{}\%} 
   \FunctionTok{addPolygons}\NormalTok{(}\AttributeTok{data =}\NormalTok{ PaTi\_polygon\_pl,}
               \AttributeTok{popup=}\FunctionTok{paste}\NormalTok{(}\CommentTok{\#"\textless{}b\textgreater{}Infraction Code\textless{}/b\textgreater{}",PaTi\_polygon\_pl$infraction\_code,"\textless{}br\textgreater{}",}
@@ -674,7 +756,7 @@ First step is to install and load the required packages.
                           \StringTok{"\textless{}b\textgreater{}Number of Infraction:\textless{}/b\textgreater{}"}\NormalTok{,PaTi\_polygon\_pl}\SpecialCharTok{$}\NormalTok{no\_infraction,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{,}
                           \StringTok{"\textless{}b\textgreater{}Infraction Fine:\textless{}/b\textgreater{}"}\NormalTok{,}\FunctionTok{dollar\_format}\NormalTok{()(PaTi\_polygon\_pl}\SpecialCharTok{$}\NormalTok{set\_fine\_amount),}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{),}
               \AttributeTok{label =} \SpecialCharTok{\textasciitilde{}} \FunctionTok{paste0}\NormalTok{(}\StringTok{"Infraction Code "}\NormalTok{, infraction\_code),}
-              \AttributeTok{color =} \StringTok{"\#6e031e"}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} 
+              \AttributeTok{color =} \SpecialCharTok{\textasciitilde{}}\NormalTok{ color) }\SpecialCharTok{\%\textgreater{}\%} 
   \FunctionTok{addPolygons}\NormalTok{(}\AttributeTok{data =}\NormalTok{ PaTi\_polygon\_pt,}
               \AttributeTok{popup=}\FunctionTok{paste}\NormalTok{(}
                           \StringTok{"\textless{}b\textgreater{}Description:\textless{}/b\textgreater{}"}\NormalTok{,PaTi\_polygon\_pt}\SpecialCharTok{$}\NormalTok{infraction\_description,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{,}
@@ -682,30 +764,191 @@ First step is to install and load the required packages.
                           \StringTok{"\textless{}b\textgreater{}Number of Infraction:\textless{}/b\textgreater{}"}\NormalTok{,PaTi\_polygon\_pt}\SpecialCharTok{$}\NormalTok{no\_infraction,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{,}
                           \StringTok{"\textless{}b\textgreater{}Infraction Fine:\textless{}/b\textgreater{}"}\NormalTok{,}\FunctionTok{dollar\_format}\NormalTok{()(PaTi\_polygon\_pt}\SpecialCharTok{$}\NormalTok{set\_fine\_amount),}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{),}
               \AttributeTok{label =} \SpecialCharTok{\textasciitilde{}} \FunctionTok{paste0}\NormalTok{(}\StringTok{"Infraction Code "}\NormalTok{, infraction\_code),}
-              \AttributeTok{color =} \StringTok{"\#6e031e"}\NormalTok{) }\SpecialCharTok{\%\textgreater{}\%} 
-  \FunctionTok{addPolygons}\NormalTok{(}\AttributeTok{data =}\NormalTok{ GP\_sf\_buf,}
+              \AttributeTok{color =} \SpecialCharTok{\textasciitilde{}}\NormalTok{ color) }\SpecialCharTok{\%\textgreater{}\%} 
+  \CommentTok{\# addPolygons(data = GP\_sf\_closest\_buf,}
+  \CommentTok{\#             popup=paste(}
+  \CommentTok{\#                         "\textless{}b\textgreater{}Address:\textless{}/b\textgreater{}",GP\_sf\_closest\_buf$address,"\textless{}br\textgreater{}",}
+  \CommentTok{\#                         "\textless{}b\textgreater{}Rate:\textless{}/b\textgreater{}",GP\_sf\_closest\_buf$rate),}
+  \CommentTok{\#             label = \textasciitilde{} paste0("Green P id: ", id),}
+  \CommentTok{\#             color = \textasciitilde{} color) \%\textgreater{}\% }
+  \FunctionTok{addMarkers}\NormalTok{(}\AttributeTok{data =}\NormalTok{ GP\_sf\_closest,}
+             \CommentTok{\# icon = makeIcon("https://www.iconpacks.net/icons/2/free{-}location{-}icon{-}2955{-}thumb.png", iconWidth = 16, iconHeight = 16),}
+              \CommentTok{\#   icon = makeIcon("my{-}icon.png", iconWidth = 16, iconHeight = 16),}
               \AttributeTok{popup=}\FunctionTok{paste}\NormalTok{(}
-                          \StringTok{"\textless{}b\textgreater{}Address:\textless{}/b\textgreater{}"}\NormalTok{,GP\_sf\_buf}\SpecialCharTok{$}\NormalTok{address,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{,}
-                          \StringTok{"\textless{}b\textgreater{}Rate:\textless{}/b\textgreater{}"}\NormalTok{,GP\_sf\_buf}\SpecialCharTok{$}\NormalTok{rate),}
-              \AttributeTok{label =} \SpecialCharTok{\textasciitilde{}} \FunctionTok{paste0}\NormalTok{(}\StringTok{"Green P id: "}\NormalTok{, id),}
-              \AttributeTok{color =} \StringTok{"green"}\NormalTok{) }\CommentTok{\#\%\textgreater{}\% }
+                          \StringTok{"\textless{}b\textgreater{}Address:\textless{}/b\textgreater{}"}\NormalTok{,GP\_sf\_closest}\SpecialCharTok{$}\NormalTok{address,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{,}
+                          \StringTok{"\textless{}b\textgreater{}Rate:\textless{}/b\textgreater{}"}\NormalTok{,GP\_sf\_closest}\SpecialCharTok{$}\NormalTok{rate),}
+              \AttributeTok{label =} \SpecialCharTok{\textasciitilde{}} \FunctionTok{paste0}\NormalTok{(}\StringTok{"Green P id: "}\NormalTok{, id))}
 
-\NormalTok{PaTi\_GP\_400\_plot}
+
+\ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \DecValTok{1}\SpecialCharTok{:}\FunctionTok{nrow}\NormalTok{(PaTi\_polygon\_center))\{}
+\NormalTok{PaTi\_GP\_map }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_GP\_map }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{addPolylines}\NormalTok{(}
+      \AttributeTok{lng =} \FunctionTok{c}\NormalTok{(PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{X[i],PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{GP\_lon[i]),}
+      \AttributeTok{lat =} \FunctionTok{c}\NormalTok{(PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{Y[i],PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{GP\_lat[i]),}
+      \AttributeTok{color =}\NormalTok{ PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{color[i],}
+      \AttributeTok{popup=}\FunctionTok{paste}\NormalTok{(}\StringTok{"\textless{}b\textgreater{}Distance:\textless{}/b\textgreater{}"}\NormalTok{,}\FunctionTok{round}\NormalTok{(PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{GP\_dist[i]),}\StringTok{"m"}\NormalTok{,}\StringTok{"\textless{}br\textgreater{}"}\NormalTok{))}
+\NormalTok{\}}
+
+\NormalTok{PaTi\_GP\_map}
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{main_1_files/figure-latex/Green P map-1.pdf}
+\includegraphics{main_1_files/figure-latex/Q2 plot-1.pdf}
 
-Add a new chunk by clicking the \emph{Insert Chunk} button on the
-toolbar or by pressing \emph{Ctrl+Alt+I}.
+\hypertarget{demographics}{%
+\subsection{Demographics}\label{demographics}}
 
-When you save the notebook, an HTML file containing the code and output
-will be saved alongside it (click the \emph{Preview} button or press
-\emph{Ctrl+Shift+K} to preview the HTML file).
+Here, I pull the data about the neighbourhoods.
 
-The preview shows you a rendered HTML copy of the contents of the
-editor. Consequently, unlike \emph{Knit}, \emph{Preview} does not run
-any R code chunks. Instead, the output of the chunk when it was last run
-in the editor is displayed.
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ngbh\_metadata }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{show\_package}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/neighbourhoods/"}\NormalTok{)}
+\NormalTok{ngbh\_list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/neighbourhoods/"}\NormalTok{)}
+\NormalTok{ngbh\_retrieve }\OtherTok{\textless{}{-}} \ControlFlowTok{function}\NormalTok{(URL,No,format) \{}
+\NormalTok{  list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(URL)}
+\NormalTok{  data\_id }\OtherTok{\textless{}{-}}\NormalTok{ list[[No, }\StringTok{"id"}\NormalTok{]]}
+\NormalTok{  resource }\OtherTok{\textless{}{-}}
+    \FunctionTok{resource\_show}\NormalTok{(data\_id, }\AttributeTok{url =} \StringTok{"https://ckan0.cf.opendata.inter.prod{-}toronto.ca/"}\NormalTok{, }\AttributeTok{as =} \StringTok{"list"}\NormalTok{)}
+\NormalTok{  dir }\OtherTok{\textless{}{-}} \FunctionTok{tempdir}\NormalTok{()}
+\NormalTok{  resource\_dir }\OtherTok{\textless{}{-}}\NormalTok{ fs}\SpecialCharTok{::}\FunctionTok{dir\_create}\NormalTok{(}\FunctionTok{paste0}\NormalTok{(dir, }\StringTok{"/"}\NormalTok{, data\_id))}
+\NormalTok{  save\_path }\OtherTok{\textless{}{-}}
+    \FunctionTok{ckan\_fetch}\NormalTok{(}
+\NormalTok{      resource[[}\StringTok{"url"}\NormalTok{]],}
+      \AttributeTok{store =} \StringTok{"disk"}\NormalTok{,}
+      \AttributeTok{path =} \FunctionTok{paste0}\NormalTok{(dir, }\StringTok{"/"}\NormalTok{, data\_id, }\StringTok{"/"}\NormalTok{, }\StringTok{"res."}\NormalTok{,format)}
+\NormalTok{    )}
+\NormalTok{  files }\OtherTok{\textless{}{-}} \FunctionTok{unzip}\NormalTok{(save\_path[[}\StringTok{"path"}\NormalTok{]], }\AttributeTok{exdir =}\NormalTok{ resource\_dir)}
+\NormalTok{  res }\OtherTok{\textless{}{-}} \FunctionTok{st\_read}\NormalTok{(files[}\FunctionTok{str\_ends}\NormalTok{(files, }\StringTok{".shp"}\NormalTok{)])}
+\NormalTok{  res\_names }\OtherTok{\textless{}{-}} \FunctionTok{read.csv}\NormalTok{(files[}\FunctionTok{str\_ends}\NormalTok{(files, }\StringTok{".csv"}\NormalTok{)])}
+  \FunctionTok{colnames}\NormalTok{(res) }\OtherTok{\textless{}{-}}\NormalTok{ res\_names}\SpecialCharTok{$}\NormalTok{name}
+  \FunctionTok{return}\NormalTok{(res)}
+\NormalTok{\}}
+
+\NormalTok{ngbh\_shp }\OtherTok{\textless{}{-}} \FunctionTok{ngbh\_retrieve}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/neighbourhoods/"}\NormalTok{,}\DecValTok{5}\NormalTok{,}\StringTok{"zip"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Reading layer `Neighbourhoods - historical 140' from data source 
+##   `C:\Users\nimad\AppData\Local\Temp\RtmpukQkbF\d4b0aa31-19a7-47ff-a828-6893e5c17eec\Neighbourhoods - historical 140.shp' 
+##   using driver `ESRI Shapefile'
+## Simple feature collection with 140 features and 11 fields
+## Geometry type: POLYGON
+## Dimension:     XY
+## Bounding box:  xmin: -79.63926 ymin: 43.581 xmax: -79.11527 ymax: 43.85546
+## Geodetic CRS:  WGS 84
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ngbh\_prof\_metadata }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{show\_package}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/neighbourhood{-}profiles/"}\NormalTok{)}
+\NormalTok{ngbh\_prof\_list }\OtherTok{\textless{}{-}}\NormalTok{ opendatatoronto}\SpecialCharTok{::}\FunctionTok{list\_package\_resources}\NormalTok{(}\StringTok{"https://open.toronto.ca/dataset/neighbourhood{-}profiles/"}\NormalTok{)}
+\NormalTok{ngbh\_prof\_data }\OtherTok{\textless{}{-}}\NormalTok{ ngbh\_prof\_list[}\DecValTok{2}\NormalTok{,] }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{get\_resource}\NormalTok{()}
+\end{Highlighting}
+\end{Shaded}
+
+Here I pull information about socio-economical features of the
+neighbourhoods and compare the ones with High Infraction or not. I use
+Logistic regression. The result shows that these features needs
+refinement. Perhaps better features should be obtained.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{sparse\_neigh }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{st\_intersects}\NormalTok{(ngbh\_shp)}
+\FunctionTok{is.na}\NormalTok{(sparse\_neigh) }\OtherTok{\textless{}{-}} \FunctionTok{lengths}\NormalTok{(sparse\_neigh) }\SpecialCharTok{==} \DecValTok{0}
+\NormalTok{PaTi\_polygon\_center }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{ungroup}\NormalTok{() }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{neighbourhood =}\NormalTok{ ngbh\_shp[}\FunctionTok{unlist}\NormalTok{(sparse\_neigh),]}\SpecialCharTok{$}\NormalTok{AREA\_NAME)}
+\NormalTok{PaTi\_polygon\_center }\OtherTok{\textless{}{-}}\NormalTok{ PaTi\_polygon\_center }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{neighbourhood =} \FunctionTok{str\_remove}\NormalTok{(neighbourhood,}\StringTok{"}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{(}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{d+}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{)"}\NormalTok{),}
+                               \AttributeTok{neighbourhood =} \FunctionTok{str\_replace\_all}\NormalTok{(neighbourhood,}\StringTok{"([:alpha:]+)"}\NormalTok{,}\StringTok{"}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{1}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{."}\NormalTok{),}
+                               \AttributeTok{neighbourhood =} \FunctionTok{str\_remove\_all}\NormalTok{(neighbourhood,}\StringTok{"[\^{}a{-}zA{-}Z}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{.]"}\NormalTok{),}
+                               \AttributeTok{neighbourhood =} \FunctionTok{str\_remove\_all}\NormalTok{(neighbourhood,}\StringTok{"}\SpecialCharTok{\textbackslash{}\textbackslash{}}\StringTok{.$"}\NormalTok{),}
+\NormalTok{                               )}
+\CommentTok{\#8 Population density per square kilometre}
+\CommentTok{\#947  Median total income in 2015 among recipients ($)}
+\CommentTok{\#960 Average total income in 2015 among recipients ($)}
+\CommentTok{\#1019 Income Median total income of households in 2015 ($)}
+\CommentTok{\# 1152  Immigration and citizenship Non{-}immigrants}
+\CommentTok{\# 1153  Immigration and citizenship Immigrants}
+\CommentTok{\#1629   Housing Owner}
+\CommentTok{\# 1630  Housing Renter}
+
+\CommentTok{\#1703   Education   Total {-} Highest certificate, diploma or degree for the population aged 15 years an}
+\CommentTok{\#1710   Education   University certificate, diploma or degree at bachelor level or above}
+
+\CommentTok{\#1715   Education   Total {-} Highest certificate, diploma or degree for the population aged 25 to 64 ye}
+\CommentTok{\#1725   Education   University certificate, diploma or degree at bachelor level or above}
+
+
+
+
+\CommentTok{\#1966   Journey to work Total {-} Main mode of commuting for the employed labour force aged 15 years and over in \#1967    Journey to work private households with a usual place of work or no fixed workplace address {-} 25\% sample data   }
+
+
+
+\CommentTok{\# 2368  Mobility Total {-} Mobility status 1 year ago {-} 25\% sample data   }
+\CommentTok{\# 2369  Mobility Non{-}movers }
+\CommentTok{\# 2370  Mobility Movers}
+
+
+
+\NormalTok{ngbh\_filtered\_data }\OtherTok{\textless{}{-}}\NormalTok{ ngbh\_prof\_data }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{filter}\NormalTok{(X\_id }\SpecialCharTok{\%in\%} \FunctionTok{c}\NormalTok{(}\DecValTok{8}\NormalTok{,}\DecValTok{1152}\NormalTok{,}\DecValTok{1153}\NormalTok{,}\DecValTok{1629}\NormalTok{,}\DecValTok{1630}\NormalTok{,}\DecValTok{1703}\NormalTok{,}\DecValTok{1710}\NormalTok{,}\DecValTok{1715}\NormalTok{,}\DecValTok{1725}\NormalTok{,}\DecValTok{1966}\NormalTok{,}\DecValTok{1967}\NormalTok{,}\DecValTok{2368}\NormalTok{,}\DecValTok{2369}\NormalTok{,}\DecValTok{2370}\NormalTok{)) }\SpecialCharTok{\%\textgreater{}\%}
+  \FunctionTok{pivot\_longer}\NormalTok{(}\AttributeTok{cols =}\NormalTok{ City.of.Toronto}\SpecialCharTok{:}\NormalTok{Yorkdale.Glen.Park,}
+                                  \AttributeTok{values\_to =} \StringTok{"value"}\NormalTok{,}
+                                  \AttributeTok{names\_to =} \StringTok{"neighbourhood"}\NormalTok{)}
+
+\NormalTok{ngbh\_filtered\_data\_wide }\OtherTok{\textless{}{-}}\NormalTok{ ngbh\_filtered\_data }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{select}\NormalTok{(X\_id,neighbourhood,value) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{value =} \FunctionTok{as.numeric}\NormalTok{(}\FunctionTok{gsub}\NormalTok{(}\StringTok{","}\NormalTok{, }\StringTok{""}\NormalTok{, value))) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{pivot\_wider}\NormalTok{(}\AttributeTok{id\_cols =} \FunctionTok{c}\NormalTok{(}\StringTok{"neighbourhood"}\NormalTok{),}
+              \AttributeTok{names\_from =} \StringTok{"X\_id"}\NormalTok{,}
+              \AttributeTok{values\_from =} \StringTok{"value"}\NormalTok{) }
+\NormalTok{ngbh\_filtered\_data\_wide }\OtherTok{\textless{}{-}}\NormalTok{ ngbh\_filtered\_data\_wide }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{mutate}\NormalTok{(}\AttributeTok{pop\_density =} \StringTok{\textasciigrave{}}\AttributeTok{8}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\FunctionTok{max}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{8}\StringTok{\textasciigrave{}}\NormalTok{),}
+    \AttributeTok{Immigration\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{1153}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{1153}\StringTok{\textasciigrave{}}\SpecialCharTok{+}\StringTok{\textasciigrave{}}\AttributeTok{1152}\StringTok{\textasciigrave{}}\NormalTok{),}
+         \AttributeTok{rent\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{1630}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{1630}\StringTok{\textasciigrave{}}\SpecialCharTok{+}\StringTok{\textasciigrave{}}\AttributeTok{1629}\StringTok{\textasciigrave{}}\NormalTok{),}
+         \AttributeTok{young\_University\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{1710}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{1703}\StringTok{\textasciigrave{}}\NormalTok{),}
+         \AttributeTok{middle\_University\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{1725}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{1715}\StringTok{\textasciigrave{}}\NormalTok{),}
+         \AttributeTok{driver\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{1967}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{1966}\StringTok{\textasciigrave{}}\NormalTok{),}
+         \AttributeTok{newly\_moved\_rate =} \StringTok{\textasciigrave{}}\AttributeTok{2370}\StringTok{\textasciigrave{}}\SpecialCharTok{/}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{2370}\StringTok{\textasciigrave{}}\SpecialCharTok{+}\StringTok{\textasciigrave{}}\AttributeTok{2369}\StringTok{\textasciigrave{}}\NormalTok{)) }\SpecialCharTok{\%\textgreater{}\%} 
+  \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\FunctionTok{c}\NormalTok{(}\StringTok{\textasciigrave{}}\AttributeTok{8}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1152}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1153}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1629}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1630}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1703}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1710}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1715}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1725}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1966}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{1967}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{2368}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{2369}\StringTok{\textasciigrave{}}\NormalTok{,}\StringTok{\textasciigrave{}}\AttributeTok{2370}\StringTok{\textasciigrave{}}\NormalTok{))}
+
+\NormalTok{ngbh\_filtered\_data\_wide }\OtherTok{\textless{}{-}}\NormalTok{ ngbh\_filtered\_data\_wide }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{mutate}\NormalTok{(}\AttributeTok{High\_infraction =}\NormalTok{ neighbourhood }\SpecialCharTok{\%in\%}\NormalTok{ PaTi\_polygon\_center}\SpecialCharTok{$}\NormalTok{neighbourhood)}
+
+\NormalTok{logistic\_model }\OtherTok{\textless{}{-}} \FunctionTok{glm}\NormalTok{(High\_infraction }\SpecialCharTok{\textasciitilde{}}\NormalTok{ ., }\AttributeTok{family =} \FunctionTok{binomial}\NormalTok{(), ngbh\_filtered\_data\_wide }\SpecialCharTok{\%\textgreater{}\%} \FunctionTok{select}\NormalTok{(}\SpecialCharTok{{-}}\NormalTok{neighbourhood))}
+
+\FunctionTok{summary}\NormalTok{(logistic\_model)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 
+## Call:
+## glm(formula = High_infraction ~ ., family = binomial(), data = ngbh_filtered_data_wide %>% 
+##     select(-neighbourhood))
+## 
+## Deviance Residuals: 
+##     Min       1Q   Median       3Q      Max  
+## -1.3520  -0.3383  -0.2305  -0.1625   2.8970  
+## 
+## Coefficients:
+##                        Estimate Std. Error z value Pr(>|z|)  
+## (Intercept)             -9.3266     4.4678  -2.088   0.0368 *
+## pop_density              0.5105     4.3052   0.119   0.9056  
+## Immigration_rate        -0.3452     3.4298  -0.101   0.9198  
+## rent_rate               -0.5878     3.9615  -0.148   0.8820  
+## young_University_rate    5.9963    19.6821   0.305   0.7606  
+## middle_University_rate  -0.8542    16.7041  -0.051   0.9592  
+## driver_rate              3.9795     4.8668   0.818   0.4135  
+## newly_moved_rate        21.3222    10.3165   2.067   0.0388 *
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## (Dispersion parameter for binomial family taken to be 1)
+## 
+##     Null deviance: 82.081  on 140  degrees of freedom
+## Residual deviance: 59.815  on 133  degrees of freedom
+## AIC: 75.815
+## 
+## Number of Fisher Scoring iterations: 6
+\end{verbatim}
 
 \end{document}

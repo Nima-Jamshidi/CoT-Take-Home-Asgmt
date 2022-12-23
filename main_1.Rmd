@@ -526,6 +526,7 @@ PaTi_GP_map <- PaTi_GP_map %>%
 
 PaTi_GP_map
 ```
+
 ## Demographics
 
 Here, I pull the data about the neighbourhoods.
